@@ -16,7 +16,7 @@ Local-first job-search tracker. Applications, follow-ups, contacts, and an activ
 
 ## Setup
 
-Requires Node.js 20+.
+Requires **Node.js 20 or 22 LTS** (recommended). Node 24 also works. You do **not** need Visual Studio, Python, or C++ build tools.
 
 ```bash
 npm install
@@ -35,6 +35,14 @@ npm start
 ```
 
 No `.env` is required. The database is created automatically at `data/jobbot.sqlite` on first run.
+
+### Windows
+
+`npm install` does not compile native addons. SQLite comes from `@libsql/client`, which ships prebuilt binaries (no `node-gyp`, no “Desktop development with C++” workload).
+
+If `npm install` fails while cleaning `node_modules` (`EPERM` / file locked), close any running Node or Next.js processes, delete the `node_modules` folder, and run `npm install` again.
+
+Prefer Node 20 or 22 LTS over Node 24 if you can. This app does not need Node 24, and LTS is the smoother path for most Windows setups.
 
 ## Data
 
@@ -63,4 +71,4 @@ company,role,platform,status,location,job_url,salary_min,salary_max,notes,applie
 
 ## Stack
 
-Next.js App Router · TypeScript · Tailwind CSS · shadcn/ui · better-sqlite3
+Next.js App Router · TypeScript · Tailwind CSS · shadcn/ui · `@libsql/client` (local SQLite file)

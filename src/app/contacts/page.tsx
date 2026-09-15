@@ -9,10 +9,9 @@ import {
 } from "@/components/ui/card";
 import { deleteContactAction } from "@/lib/actions";
 import { listContacts } from "@/lib/queries";
-import type { ContactWithApp } from "@/lib/types";
 
-export default function ContactsPage() {
-  const contacts = listContacts() as ContactWithApp[];
+export default async function ContactsPage() {
+  const contacts = await listContacts();
 
   return (
     <div className="space-y-5">

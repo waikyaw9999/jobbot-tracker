@@ -20,11 +20,11 @@ import {
   listRecentActivity,
 } from "@/lib/queries";
 
-export default function DashboardPage() {
-  const stats = getDashboardStats();
-  const pipeline = getPipelineCounts();
-  const followUps = bucketFollowUps(listOpenFollowUps());
-  const activity = listRecentActivity(8);
+export default async function DashboardPage() {
+  const stats = await getDashboardStats();
+  const pipeline = await getPipelineCounts();
+  const followUps = bucketFollowUps(await listOpenFollowUps());
+  const activity = await listRecentActivity(8);
   const upcoming = [...followUps.today, ...followUps.week].slice(0, 6);
   const maxPipeline = Math.max(1, ...pipeline.map((p) => p.count));
 

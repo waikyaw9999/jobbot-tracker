@@ -55,25 +55,25 @@ function readInput(formData: FormData): ApplicationInput {
 }
 
 export async function createApplicationAction(formData: FormData) {
-  const id = insertApplication(readInput(formData));
+  const id = await insertApplication(readInput(formData));
   revalidateAll();
   redirect(`/applications/${id}`);
 }
 
 export async function updateApplicationAction(id: string, formData: FormData) {
-  updateApplication(id, readInput(formData));
+  await updateApplication(id, readInput(formData));
   revalidateAll();
   redirect(`/applications/${id}`);
 }
 
 export async function updateStatusAction(id: string, status: Status) {
   if (!isStatus(status)) throw new Error("Invalid status");
-  updateApplicationStatus(id, status);
+  await updateApplicationStatus(id, status);
   revalidateAll();
 }
 
 export async function deleteApplicationAction(id: string) {
-  deleteApplication(id);
+  await deleteApplication(id);
   revalidateAll();
   redirect("/applications");
 }
@@ -82,24 +82,24 @@ export async function addFollowUpAction(applicationId: string, formData: FormDat
   const dueAt = String(formData.get("due_at") ?? "").trim();
   const note = String(formData.get("note") ?? "").trim();
   if (!dueAt) throw new Error("Due date is required");
-  insertFollowUp(applicationId, dueAt, note || null);
+  await insertFollowUp(applicationId, dueAt, note || null);
   revalidateAll();
 }
 
 export async function completeFollowUpAction(id: string) {
-  completeFollowUp(id);
+  await completeFollowUp(id);
   revalidateAll();
 }
 
 export async function deleteFollowUpAction(id: string) {
-  deleteFollowUp(id);
+  await deleteFollowUp(id);
   revalidateAll();
 }
 
 export async function addContactAction(applicationId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required");
-  insertContact(applicationId, {
+  await insertContact(applicationId, {
     name,
     title: String(formData.get("title") ?? "").trim() || null,
     email: String(formData.get("email") ?? "").trim() || null,
@@ -111,17 +111,17 @@ export async function addContactAction(applicationId: string, formData: FormData
 }
 
 export async function deleteContactAction(id: string) {
-  deleteContact(id);
+  await deleteContact(id);
   revalidateAll();
 }
 
 export async function seedSampleAction() {
-  seedSampleData();
+  await seedSampleData();
   revalidateAll();
 }
 
 export async function clearSampleAction() {
-  clearSampleData();
+  await clearSampleData();
   revalidateAll();
 }
 
@@ -142,7 +142,7 @@ export async function importCsvAction(
     };
   }
   for (const row of rows) {
-    insertApplication(row);
+    await insertApplication(row);
   }
   revalidateAll();
   const extra = errors.length ? ` ${errors.length} row(s) skipped.` : "";
