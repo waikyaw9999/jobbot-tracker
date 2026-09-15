@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDb } from "@/lib/db";
+import { run, withTransaction } from "@/lib/db";
 import { addDaysIso, todayIso } from "@/lib/dates";
 import {
   addActivity,
@@ -31,8 +31,7 @@ type SeedApp = {
   }[];
 };
 
-export function seedSampleData() {
-  const db = getDb();
+export async function seedSampleData() {
   const today = todayIso();
 
   const seeds: SeedApp[] = [
@@ -249,8 +248,8 @@ export function seedSampleData() {
     },
   ];
 
-  const run = db.transaction(() => {
-    clearSampleData();
+  await withTransaction(async () => {
+    await clearSampleData();
     for (const seed of seeds) {
       const appliedAt =
         seed.appliedOffset !== undefined
@@ -258,7 +257,7 @@ export function seedSampleData() {
           : seed.status === "saved"
             ? null
             : today;
-      const applicationId = insertApplication(
+      const applicationId = await insertApplication(
         {
           company: seed.company,
           role: seed.role,
@@ -276,27 +275,26 @@ export function seedSampleData() {
 
       if (seed.followUp) {
         const due = addDaysIso(seed.followUp.offset);
-        const followUpId = insertFollowUp(applicationId, due, seed.followUp.note, {
+        const followUpId = await insertFollowUp(applicationId, due, seed.followUp.note, {
           silent: true,
         });
         if (seed.followUp.done) {
-          db.prepare(
-            "UPDATE follow_ups SET completed_at = ? WHERE id = ?"
-          ).run(addDaysIso(seed.followUp.offset + 1) + "T16:00:00.000Z", followUpId);
+          await run("UPDATE follow_ups SET completed_at = ? WHERE id = ?", [
+            addDaysIso(seed.followUp.offset + 1) + "T16:00:00.000Z",
+            followUpId,
+          ]);
         }
       }
 
       for (const contact of seed.contacts ?? []) {
-        insertContact(applicationId, contact);
+        await insertContact(applicationId, contact);
       }
 
-      addActivity(
+      await addActivity(
         applicationId,
         "seeded",
         "Loaded as SAMPLE demo data — safe to clear anytime"
       );
     }
   });
-
-  run();
 }

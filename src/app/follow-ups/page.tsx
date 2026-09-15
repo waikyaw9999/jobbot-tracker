@@ -14,8 +14,8 @@ import { formatDate } from "@/lib/dates";
 import { bucketFollowUps, listOpenFollowUps } from "@/lib/queries";
 import type { FollowUpWithApp } from "@/lib/types";
 
-export default function FollowUpsPage() {
-  const buckets = bucketFollowUps(listOpenFollowUps());
+export default async function FollowUpsPage() {
+  const buckets = bucketFollowUps(await listOpenFollowUps());
 
   return (
     <div className="space-y-5">

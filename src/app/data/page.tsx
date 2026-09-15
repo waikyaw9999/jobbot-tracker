@@ -11,9 +11,9 @@ import {
 import { CSV_HEADERS } from "@/lib/csv";
 import { countSampleApplications, listApplications } from "@/lib/queries";
 
-export default function DataPage() {
-  const total = listApplications().length;
-  const sampleCount = countSampleApplications();
+export default async function DataPage() {
+  const total = (await listApplications()).length;
+  const sampleCount = await countSampleApplications();
 
   return (
     <div className="space-y-5">

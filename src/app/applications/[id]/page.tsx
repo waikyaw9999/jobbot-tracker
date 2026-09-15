@@ -38,12 +38,12 @@ export default async function ApplicationDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const app = getApplication(id);
+  const app = await getApplication(id);
   if (!app) notFound();
 
-  const followUps = listFollowUps(id);
-  const contacts = listContacts(id);
-  const activities = listActivities(id);
+  const followUps = await listFollowUps(id);
+  const contacts = await listContacts(id);
+  const activities = await listActivities(id);
   const salary =
     app.salary_min || app.salary_max
       ? [app.salary_min, app.salary_max]

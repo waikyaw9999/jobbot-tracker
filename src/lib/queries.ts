@@ -1,9 +1,8 @@
 import "server-only";
 
 import { randomUUID } from "node:crypto";
-import { getDb } from "@/lib/db";
+import { all, get, run } from "@/lib/db";
 import {
-  isTerminal,
   PIPELINE_STATUSES,
   statusLabel,
   type Platform,
@@ -26,12 +25,11 @@ function id() {
   return randomUUID();
 }
 
-export function listApplications(filters?: {
+export async function listApplications(filters?: {
   q?: string;
   status?: Status | "all";
   platform?: Platform | "all";
 }) {
-  const db = getDb();
   const where: string[] = [];
   const params: Record<string, string> = {};
 
@@ -54,83 +52,85 @@ export function listApplications(filters?: {
     where.length ? `WHERE ${where.join(" AND ")}` : ""
   } ORDER BY updated_at DESC`;
 
-  return db.prepare(sql).all(params) as Application[];
+  return all<Application>(sql, params);
 }
 
-export function getApplication(applicationId: string) {
-  return getDb()
-    .prepare("SELECT * FROM applications WHERE id = ?")
-    .get(applicationId) as Application | undefined;
+export async function getApplication(applicationId: string) {
+  return get<Application>("SELECT * FROM applications WHERE id = ?", [
+    applicationId,
+  ]);
 }
 
-export function countSampleApplications() {
-  const row = getDb()
-    .prepare("SELECT COUNT(*) AS n FROM applications WHERE is_sample = 1")
-    .get() as { n: number };
-  return row.n;
+export async function countSampleApplications() {
+  const row = await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM applications WHERE is_sample = 1"
+  );
+  return row?.n ?? 0;
 }
 
-export function insertApplication(
+export async function insertApplication(
   input: ApplicationInput,
   options?: { isSample?: boolean; skipAutoFollowUp?: boolean }
 ) {
-  const db = getDb();
   const now = nowIso();
   const applicationId = id();
   const status = input.status;
   const appliedAt =
     input.applied_at ?? (status === "applied" || !isSavedLike(status) ? todayIso() : null);
 
-  db.prepare(
+  await run(
     `INSERT INTO applications (
       id, company, role, platform, status, location, job_url,
       salary_min, salary_max, notes, applied_at, created_at, updated_at, is_sample
     ) VALUES (
       @id, @company, @role, @platform, @status, @location, @job_url,
       @salary_min, @salary_max, @notes, @applied_at, @created_at, @updated_at, @is_sample
-    )`
-  ).run({
-    id: applicationId,
-    company: input.company,
-    role: input.role,
-    platform: input.platform,
-    status,
-    location: emptyToNull(input.location),
-    job_url: emptyToNull(input.job_url),
-    salary_min: input.salary_min ?? null,
-    salary_max: input.salary_max ?? null,
-    notes: emptyToNull(input.notes),
-    applied_at: emptyToNull(appliedAt),
-    created_at: now,
-    updated_at: now,
-    is_sample: options?.isSample ? 1 : 0,
-  });
+    )`,
+    {
+      id: applicationId,
+      company: input.company,
+      role: input.role,
+      platform: input.platform,
+      status,
+      location: emptyToNull(input.location),
+      job_url: emptyToNull(input.job_url),
+      salary_min: input.salary_min ?? null,
+      salary_max: input.salary_max ?? null,
+      notes: emptyToNull(input.notes),
+      applied_at: emptyToNull(appliedAt),
+      created_at: now,
+      updated_at: now,
+      is_sample: options?.isSample ? 1 : 0,
+    }
+  );
 
-  addActivity(
+  await addActivity(
     applicationId,
     "created",
     `Added ${input.role} at ${input.company} · ${statusLabel(status)}`
   );
 
   if (!options?.skipAutoFollowUp) {
-    maybeAutoFollowUp(applicationId, undefined, status);
+    await maybeAutoFollowUp(applicationId, undefined, status);
   }
 
   return applicationId;
 }
 
-export function updateApplication(applicationId: string, input: ApplicationInput) {
-  const existing = getApplication(applicationId);
+export async function updateApplication(
+  applicationId: string,
+  input: ApplicationInput
+) {
+  const existing = await getApplication(applicationId);
   if (!existing) throw new Error("Application not found");
 
-  const db = getDb();
   const now = nowIso();
   const appliedAt =
     input.applied_at ??
     existing.applied_at ??
     (input.status === "applied" ? todayIso() : null);
 
-  db.prepare(
+  await run(
     `UPDATE applications SET
       company = @company,
       role = @role,
@@ -143,36 +143,37 @@ export function updateApplication(applicationId: string, input: ApplicationInput
       notes = @notes,
       applied_at = @applied_at,
       updated_at = @updated_at
-    WHERE id = @id`
-  ).run({
-    id: applicationId,
-    company: input.company,
-    role: input.role,
-    platform: input.platform,
-    status: input.status,
-    location: emptyToNull(input.location),
-    job_url: emptyToNull(input.job_url),
-    salary_min: input.salary_min ?? null,
-    salary_max: input.salary_max ?? null,
-    notes: emptyToNull(input.notes),
-    applied_at: emptyToNull(appliedAt),
-    updated_at: now,
-  });
+    WHERE id = @id`,
+    {
+      id: applicationId,
+      company: input.company,
+      role: input.role,
+      platform: input.platform,
+      status: input.status,
+      location: emptyToNull(input.location),
+      job_url: emptyToNull(input.job_url),
+      salary_min: input.salary_min ?? null,
+      salary_max: input.salary_max ?? null,
+      notes: emptyToNull(input.notes),
+      applied_at: emptyToNull(appliedAt),
+      updated_at: now,
+    }
+  );
 
   if (existing.status !== input.status) {
-    addActivity(
+    await addActivity(
       applicationId,
       "status_changed",
       `Status ${statusLabel(existing.status)} → ${statusLabel(input.status)}`
     );
-    maybeAutoFollowUp(applicationId, existing.status, input.status);
+    await maybeAutoFollowUp(applicationId, existing.status, input.status);
   } else {
-    addActivity(applicationId, "updated", "Application details updated");
+    await addActivity(applicationId, "updated", "Application details updated");
   }
 }
 
-export function updateApplicationStatus(applicationId: string, status: Status) {
-  const existing = getApplication(applicationId);
+export async function updateApplicationStatus(applicationId: string, status: Status) {
+  const existing = await getApplication(applicationId);
   if (!existing) throw new Error("Application not found");
   if (existing.status === status) return;
 
@@ -180,51 +181,50 @@ export function updateApplicationStatus(applicationId: string, status: Status) {
   const appliedAt =
     existing.applied_at ?? (status === "applied" ? todayIso() : existing.applied_at);
 
-  getDb()
-    .prepare(
-      `UPDATE applications
-       SET status = @status, applied_at = @applied_at, updated_at = @updated_at
-       WHERE id = @id`
-    )
-    .run({
+  await run(
+    `UPDATE applications
+     SET status = @status, applied_at = @applied_at, updated_at = @updated_at
+     WHERE id = @id`,
+    {
       id: applicationId,
       status,
       applied_at: appliedAt,
       updated_at: now,
-    });
+    }
+  );
 
-  addActivity(
+  await addActivity(
     applicationId,
     "status_changed",
     `Status ${statusLabel(existing.status)} → ${statusLabel(status)}`
   );
-  maybeAutoFollowUp(applicationId, existing.status, status);
+  await maybeAutoFollowUp(applicationId, existing.status, status);
 }
 
-export function deleteApplication(applicationId: string) {
-  getDb().prepare("DELETE FROM applications WHERE id = ?").run(applicationId);
+export async function deleteApplication(applicationId: string) {
+  await run("DELETE FROM applications WHERE id = ?", [applicationId]);
 }
 
-export function listContacts(applicationId?: string) {
-  const db = getDb();
+export async function listContacts(applicationId: string): Promise<Contact[]>;
+export async function listContacts(): Promise<ContactWithApp[]>;
+export async function listContacts(
+  applicationId?: string
+): Promise<Contact[] | ContactWithApp[]> {
   if (applicationId) {
-    return db
-      .prepare(
-        "SELECT * FROM contacts WHERE application_id = ? ORDER BY created_at DESC"
-      )
-      .all(applicationId) as Contact[];
+    return all<Contact>(
+      "SELECT * FROM contacts WHERE application_id = ? ORDER BY created_at DESC",
+      [applicationId]
+    );
   }
-  return db
-    .prepare(
-      `SELECT c.*, a.company, a.role
-       FROM contacts c
-       JOIN applications a ON a.id = c.application_id
-       ORDER BY c.created_at DESC`
-    )
-    .all() as ContactWithApp[];
+  return all<ContactWithApp>(
+    `SELECT c.*, a.company, a.role
+     FROM contacts c
+     JOIN applications a ON a.id = c.application_id
+     ORDER BY c.created_at DESC`
+  );
 }
 
-export function insertContact(
+export async function insertContact(
   applicationId: string,
   input: {
     name: string;
@@ -236,15 +236,13 @@ export function insertContact(
   }
 ) {
   const contactId = id();
-  getDb()
-    .prepare(
-      `INSERT INTO contacts (
-        id, application_id, name, title, email, phone, linkedin_url, notes, created_at
-      ) VALUES (
-        @id, @application_id, @name, @title, @email, @phone, @linkedin_url, @notes, @created_at
-      )`
-    )
-    .run({
+  await run(
+    `INSERT INTO contacts (
+      id, application_id, name, title, email, phone, linkedin_url, notes, created_at
+    ) VALUES (
+      @id, @application_id, @name, @title, @email, @phone, @linkedin_url, @notes, @created_at
+    )`,
+    {
       id: contactId,
       application_id: applicationId,
       name: input.name,
@@ -254,98 +252,94 @@ export function insertContact(
       linkedin_url: emptyToNull(input.linkedin_url),
       notes: emptyToNull(input.notes),
       created_at: nowIso(),
-    });
-  addActivity(applicationId, "contact_added", `Contact added: ${input.name}`);
-  touchApplication(applicationId);
+    }
+  );
+  await addActivity(applicationId, "contact_added", `Contact added: ${input.name}`);
+  await touchApplication(applicationId);
   return contactId;
 }
 
-export function deleteContact(contactId: string) {
-  const row = getDb()
-    .prepare("SELECT * FROM contacts WHERE id = ?")
-    .get(contactId) as Contact | undefined;
+export async function deleteContact(contactId: string) {
+  const row = await get<Contact>("SELECT * FROM contacts WHERE id = ?", [contactId]);
   if (!row) return;
-  getDb().prepare("DELETE FROM contacts WHERE id = ?").run(contactId);
-  addActivity(row.application_id, "contact_removed", `Contact removed: ${row.name}`);
-  touchApplication(row.application_id);
+  await run("DELETE FROM contacts WHERE id = ?", [contactId]);
+  await addActivity(row.application_id, "contact_removed", `Contact removed: ${row.name}`);
+  await touchApplication(row.application_id);
 }
 
-export function listFollowUps(applicationId: string) {
-  return getDb()
-    .prepare(
-      `SELECT * FROM follow_ups
-       WHERE application_id = ?
-       ORDER BY completed_at IS NULL DESC, due_at ASC`
-    )
-    .all(applicationId) as FollowUp[];
+export async function listFollowUps(applicationId: string) {
+  return all<FollowUp>(
+    `SELECT * FROM follow_ups
+     WHERE application_id = ?
+     ORDER BY completed_at IS NULL DESC, due_at ASC`,
+    [applicationId]
+  );
 }
 
-export function insertFollowUp(
+export async function insertFollowUp(
   applicationId: string,
   dueAt: string,
   note?: string | null,
   options?: { silent?: boolean }
 ) {
   const followUpId = id();
-  getDb()
-    .prepare(
-      `INSERT INTO follow_ups (id, application_id, due_at, completed_at, note, created_at)
-       VALUES (@id, @application_id, @due_at, NULL, @note, @created_at)`
-    )
-    .run({
+  await run(
+    `INSERT INTO follow_ups (id, application_id, due_at, completed_at, note, created_at)
+     VALUES (@id, @application_id, @due_at, NULL, @note, @created_at)`,
+    {
       id: followUpId,
       application_id: applicationId,
       due_at: dueAt,
       note: emptyToNull(note),
       created_at: nowIso(),
-    });
+    }
+  );
   if (!options?.silent) {
-    addActivity(
+    await addActivity(
       applicationId,
       "follow_up_created",
       `Follow-up scheduled for ${dueAt}`
     );
-    touchApplication(applicationId);
+    await touchApplication(applicationId);
   }
   return followUpId;
 }
 
-export function completeFollowUp(followUpId: string) {
-  const row = getDb()
-    .prepare("SELECT * FROM follow_ups WHERE id = ?")
-    .get(followUpId) as FollowUp | undefined;
+export async function completeFollowUp(followUpId: string) {
+  const row = await get<FollowUp>("SELECT * FROM follow_ups WHERE id = ?", [
+    followUpId,
+  ]);
   if (!row || row.completed_at) return;
-  getDb()
-    .prepare("UPDATE follow_ups SET completed_at = ? WHERE id = ?")
-    .run(nowIso(), followUpId);
-  addActivity(
+  await run("UPDATE follow_ups SET completed_at = ? WHERE id = ?", [
+    nowIso(),
+    followUpId,
+  ]);
+  await addActivity(
     row.application_id,
     "follow_up_completed",
     `Follow-up completed (${row.due_at})`
   );
-  touchApplication(row.application_id);
+  await touchApplication(row.application_id);
 }
 
-export function deleteFollowUp(followUpId: string) {
-  const row = getDb()
-    .prepare("SELECT * FROM follow_ups WHERE id = ?")
-    .get(followUpId) as FollowUp | undefined;
+export async function deleteFollowUp(followUpId: string) {
+  const row = await get<FollowUp>("SELECT * FROM follow_ups WHERE id = ?", [
+    followUpId,
+  ]);
   if (!row) return;
-  getDb().prepare("DELETE FROM follow_ups WHERE id = ?").run(followUpId);
-  addActivity(row.application_id, "follow_up_removed", "Follow-up removed");
-  touchApplication(row.application_id);
+  await run("DELETE FROM follow_ups WHERE id = ?", [followUpId]);
+  await addActivity(row.application_id, "follow_up_removed", "Follow-up removed");
+  await touchApplication(row.application_id);
 }
 
-export function listOpenFollowUps() {
-  return getDb()
-    .prepare(
-      `SELECT f.*, a.company, a.role, a.status
-       FROM follow_ups f
-       JOIN applications a ON a.id = f.application_id
-       WHERE f.completed_at IS NULL
-       ORDER BY f.due_at ASC`
-    )
-    .all() as FollowUpWithApp[];
+export async function listOpenFollowUps() {
+  return all<FollowUpWithApp>(
+    `SELECT f.*, a.company, a.role, a.status
+     FROM follow_ups f
+     JOIN applications a ON a.id = f.application_id
+     WHERE f.completed_at IS NULL
+     ORDER BY f.due_at ASC`
+  );
 }
 
 export function bucketFollowUps(items: FollowUpWithApp[]) {
@@ -366,95 +360,87 @@ export function bucketFollowUps(items: FollowUpWithApp[]) {
   return { overdue, today: dueToday, week: weekItems, later };
 }
 
-export function listActivities(applicationId: string) {
-  return getDb()
-    .prepare(
-      "SELECT * FROM activities WHERE application_id = ? ORDER BY created_at DESC"
-    )
-    .all(applicationId) as Activity[];
+export async function listActivities(applicationId: string) {
+  return all<Activity>(
+    "SELECT * FROM activities WHERE application_id = ? ORDER BY created_at DESC",
+    [applicationId]
+  );
 }
 
-export function listRecentActivity(limit = 8) {
-  return getDb()
-    .prepare(
-      `SELECT act.*, a.company, a.role
-       FROM activities act
-       JOIN applications a ON a.id = act.application_id
-       ORDER BY act.created_at DESC
-       LIMIT ?`
-    )
-    .all(limit) as ActivityWithApp[];
+export async function listRecentActivity(limit = 8) {
+  return all<ActivityWithApp>(
+    `SELECT act.*, a.company, a.role
+     FROM activities act
+     JOIN applications a ON a.id = act.application_id
+     ORDER BY act.created_at DESC
+     LIMIT ?`,
+    [limit]
+  );
 }
 
-export function addActivity(
+export async function addActivity(
   applicationId: string,
   type: string,
   message: string
 ) {
-  getDb()
-    .prepare(
-      `INSERT INTO activities (id, application_id, type, message, created_at)
-       VALUES (?, ?, ?, ?, ?)`
-    )
-    .run(id(), applicationId, type, message, nowIso());
+  await run(
+    `INSERT INTO activities (id, application_id, type, message, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [id(), applicationId, type, message, nowIso()]
+  );
 }
 
-export function getDashboardStats(): DashboardStats {
-  const db = getDb();
-  const total = (db.prepare("SELECT COUNT(*) AS n FROM applications").get() as {
-    n: number;
-  }).n;
+export async function getDashboardStats(): Promise<DashboardStats> {
   const terminal = ["accepted", "rejected", "withdrawn", "ghosted"];
-  const active = (
-    db
-      .prepare(
-        `SELECT COUNT(*) AS n FROM applications WHERE status NOT IN (${terminal
-          .map(() => "?")
-          .join(",")})`
-      )
-      .get(...terminal) as { n: number }
-  ).n;
   const weekAgo = addDaysIso(-7);
-  const appliedThisWeek = (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM applications WHERE applied_at IS NOT NULL AND applied_at >= ?"
-      )
-      .get(weekAgo) as { n: number }
-  ).n;
-  const overdueFollowUps = (
-    db
-      .prepare(
-        "SELECT COUNT(*) AS n FROM follow_ups WHERE completed_at IS NULL AND due_at < ?"
-      )
-      .get(todayIso()) as { n: number }
-  ).n;
-  const interviews = (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM applications WHERE status = 'interview'")
-      .get() as { n: number }
-  ).n;
-  const offers = (
-    db
-      .prepare("SELECT COUNT(*) AS n FROM applications WHERE status = 'offer'")
-      .get() as { n: number }
-  ).n;
-  const sampleCount = countSampleApplications();
+  const [
+    totalRow,
+    activeRow,
+    appliedThisWeekRow,
+    overdueFollowUpsRow,
+    interviewsRow,
+    offersRow,
+    sampleCount,
+  ] = await Promise.all([
+    get<{ n: number }>("SELECT COUNT(*) AS n FROM applications"),
+    get<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM applications WHERE status NOT IN (${terminal
+        .map(() => "?")
+        .join(",")})`,
+      terminal
+    ),
+    get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM applications WHERE applied_at IS NOT NULL AND applied_at >= ?",
+      [weekAgo]
+    ),
+    get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM follow_ups WHERE completed_at IS NULL AND due_at < ?",
+      [todayIso()]
+    ),
+    get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM applications WHERE status = 'interview'"
+    ),
+    get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM applications WHERE status = 'offer'"
+    ),
+    countSampleApplications(),
+  ]);
+
   return {
-    total,
-    active,
-    appliedThisWeek,
-    overdueFollowUps,
-    interviews,
-    offers,
+    total: totalRow?.n ?? 0,
+    active: activeRow?.n ?? 0,
+    appliedThisWeek: appliedThisWeekRow?.n ?? 0,
+    overdueFollowUps: overdueFollowUpsRow?.n ?? 0,
+    interviews: interviewsRow?.n ?? 0,
+    offers: offersRow?.n ?? 0,
     sampleCount,
   };
 }
 
-export function getPipelineCounts() {
-  const rows = getDb()
-    .prepare("SELECT status, COUNT(*) AS n FROM applications GROUP BY status")
-    .all() as { status: Status; n: number }[];
+export async function getPipelineCounts() {
+  const rows = await all<{ status: Status; n: number }>(
+    "SELECT status, COUNT(*) AS n FROM applications GROUP BY status"
+  );
   const map = Object.fromEntries(rows.map((r) => [r.status, r.n])) as Partial<
     Record<Status, number>
   >;
@@ -464,40 +450,40 @@ export function getPipelineCounts() {
   }));
 }
 
-export function clearSampleData() {
-  getDb().prepare("DELETE FROM applications WHERE is_sample = 1").run();
+export async function clearSampleData() {
+  await run("DELETE FROM applications WHERE is_sample = 1");
 }
 
-function maybeAutoFollowUp(
+async function maybeAutoFollowUp(
   applicationId: string,
   previous: Status | undefined,
   next: Status
 ) {
   if (next !== "applied") return;
   if (previous === "applied") return;
-  const open = getDb()
-    .prepare(
-      "SELECT COUNT(*) AS n FROM follow_ups WHERE application_id = ? AND completed_at IS NULL"
-    )
-    .get(applicationId) as { n: number };
-  if (open.n > 0) return;
-  insertFollowUp(
+  const open = await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM follow_ups WHERE application_id = ? AND completed_at IS NULL",
+    [applicationId]
+  );
+  if ((open?.n ?? 0) > 0) return;
+  await insertFollowUp(
     applicationId,
     addDaysIso(7),
     "Auto follow-up · 7 days after Applied",
     { silent: true }
   );
-  addActivity(
+  await addActivity(
     applicationId,
     "follow_up_created",
     "Auto follow-up scheduled for 7 days after Applied"
   );
 }
 
-function touchApplication(applicationId: string) {
-  getDb()
-    .prepare("UPDATE applications SET updated_at = ? WHERE id = ?")
-    .run(nowIso(), applicationId);
+async function touchApplication(applicationId: string) {
+  await run("UPDATE applications SET updated_at = ? WHERE id = ?", [
+    nowIso(),
+    applicationId,
+  ]);
 }
 
 function emptyToNull(value?: string | null) {
@@ -509,11 +495,10 @@ function isSavedLike(status: Status) {
   return status === "saved";
 }
 
-export function hasOpenFollowUp(applicationId: string) {
-  const row = getDb()
-    .prepare(
-      "SELECT COUNT(*) AS n FROM follow_ups WHERE application_id = ? AND completed_at IS NULL"
-    )
-    .get(applicationId) as { n: number };
-  return row.n > 0;
+export async function hasOpenFollowUp(applicationId: string) {
+  const row = await get<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM follow_ups WHERE application_id = ? AND completed_at IS NULL",
+    [applicationId]
+  );
+  return (row?.n ?? 0) > 0;
 }

@@ -4,7 +4,7 @@ import { listApplications } from "@/lib/queries";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const csv = applicationsToCsv(listApplications());
+  const csv = applicationsToCsv(await listApplications());
   return new Response(csv, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

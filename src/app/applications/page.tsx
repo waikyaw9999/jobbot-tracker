@@ -31,12 +31,12 @@ export default async function ApplicationsPage({
       ? (params.platform as Platform)
       : "all";
 
-  const applications = listApplications({
+  const applications = await listApplications({
     q,
     status,
     platform,
   });
-  const sampleCount = countSampleApplications();
+  const sampleCount = await countSampleApplications();
 
   return (
     <div className="space-y-5">
