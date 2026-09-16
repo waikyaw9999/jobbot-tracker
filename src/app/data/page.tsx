@@ -45,7 +45,9 @@ export default async function DataPage() {
             <CardTitle>Import</CardTitle>
             <CardDescription>
               Columns: {CSV_HEADERS.join(", ")}. Company and role are required.
-              Unknown platforms/statuses are skipped with an error.
+              Older CSVs without <code className="text-xs">ats</code> still import —
+              ATS is inferred from the job URL or left as Unknown.{" "}
+              <code className="text-xs">ats_vendor</code> is accepted as an alias.
             </CardDescription>
           </CardHeader>
           <CardContent>

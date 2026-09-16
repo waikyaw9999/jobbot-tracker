@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { isAts, resolveAts, type AtsVendor } from "@/lib/ats";
 import {
   isPlatform,
   isStatus,
@@ -32,10 +33,12 @@ function readInput(formData: FormData): ApplicationInput {
   const company = String(formData.get("company") ?? "").trim();
   const role = String(formData.get("role") ?? "").trim();
   const platform = String(formData.get("platform") ?? "");
+  const atsRaw = String(formData.get("ats") ?? "").trim();
   const status = String(formData.get("status") ?? "");
   if (!company || !role) throw new Error("Company and role are required");
   if (!isPlatform(platform)) throw new Error("Invalid platform");
   if (!isStatus(status)) throw new Error("Invalid status");
+  if (atsRaw && !isAts(atsRaw)) throw new Error("Invalid ATS");
 
   const salaryMin = String(formData.get("salary_min") ?? "").trim();
   const salaryMax = String(formData.get("salary_max") ?? "").trim();
@@ -44,6 +47,7 @@ function readInput(formData: FormData): ApplicationInput {
     company,
     role,
     platform: platform as Platform,
+    ats: resolveAts(atsRaw) as AtsVendor,
     status: status as Status,
     location: String(formData.get("location") ?? "").trim() || null,
     job_url: String(formData.get("job_url") ?? "").trim() || null,

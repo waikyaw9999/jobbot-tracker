@@ -4,12 +4,13 @@ Local-first job-search tracker. Applications, follow-ups, contacts, and an activ
 
 ## Features
 
-- **Applications CRUD** across LinkedIn, Indeed, Glassdoor, Wellfound, Handshake, Greenhouse, Lever, email, referral, and Other
-- **Status pipeline:** Saved → Applied → Recruiter screen → Hiring manager → Interview → Offer, plus Accepted / Rejected / Withdrawn / Ghosted
+- **Applications CRUD** across global job boards (LinkedIn, Indeed, Seek, StepStone, Reed, Bayt, JobsDB, JobStreet, Welcome to the Jungle, and more) plus email, referral, and company career sites
+- **ATS tagging** — record which applicant-tracking vendor you actually applied through (Greenhouse, Workday, Lever, Ashby, Personio, Taleo, SuccessFactors, …), separate from the job-board *source*. Includes Unknown / Other / company career site / email-referral. Known portal URLs (for example `boards.greenhouse.io`, `*.myworkdayjobs.com`, `jobs.lever.co`) pre-fill the ATS; you can always override
+- **Status pipeline:** Saved → Applied → Recruiter screen → Hiring manager → Interview → Offer, plus Accepted / Rejected / Withdrawn / Ghosted. List and kanban-style **board** views
 - **Follow-ups** grouped as overdue / today / this week / later. Moving a role to **Applied** schedules a 7-day follow-up when none is open
 - **Contacts** per application (recruiter, hiring manager, referral)
 - **Activity timeline** for status changes, notes, follow-ups, contacts, and imports
-- **Dashboard** with pipeline counts, KPIs, and recent activity
+- **Dashboard** with pipeline counts, top ATS used, KPIs, and recent activity
 - **CSV import / export**
 - **Dark mode**
 - **SAMPLE seed data** with a one-click clear-sample path (sample rows are tagged and never mixed into your own data when you clear them)
@@ -53,9 +54,11 @@ Prefer Node 20 or 22 LTS over Node 24 if you can. This app does not need Node 24
 
 `.gitignore` excludes `node_modules/`, `.next/`, `.env*`, `data/*.sqlite`, `data/*.sqlite-*`, `data/*.db`, `*.sqlite-wal`, and `*.sqlite-shm`.
 
+Existing databases pick up the optional `ats` column on next launch (`ALTER TABLE` if missing). Older rows stay `NULL` / Unknown until you edit them.
+
 ### SAMPLE data
 
-On an empty board, **Load SAMPLE data** inserts 12 fictional applications across platforms and pipeline stages, including overdue / today / this-week follow-ups. They are marked `SAMPLE`. **Clear SAMPLE data** deletes only those rows.
+On an empty board, **Load SAMPLE data** inserts fictional applications across US, EU, APAC, and MENA sources and ATS vendors, including overdue / today / this-week follow-ups. They are marked `SAMPLE`. **Clear SAMPLE data** deletes only those rows.
 
 ### CSV
 
@@ -64,10 +67,12 @@ Export from **Import / Export**, or `GET /api/export`.
 Columns:
 
 ```
-company,role,platform,status,location,job_url,salary_min,salary_max,notes,applied_at
+company,role,platform,ats,status,location,job_url,salary_min,salary_max,notes,applied_at
 ```
 
-`company` and `role` are required. Platform and status values match the app (lowercase, underscores: `recruiter_screen`, `hiring_manager`, `linkedin`, `greenhouse`, …).
+`company` and `role` are required. `ats` is optional — older CSVs without that column still import. You can also send `ats_vendor`. Empty ATS values are inferred from a known portal URL, or from sources such as `greenhouse` / `lever` / `email` / `referral`, otherwise stored as `unknown`.
+
+Platform and status values match the app (lowercase, underscores: `recruiter_screen`, `hiring_manager`, `linkedin`, `seek`, `stepstone`, `bayt`, …). ATS slugs include `greenhouse`, `workday`, `personio`, `career_site`, `email_referral`, and `unknown`.
 
 ## Stack
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink } from "lucide-react";
-import { PlatformBadge, StatusBadge } from "@/components/badges";
+import { AtsBadge, PlatformBadge, StatusBadge } from "@/components/badges";
 import { DeleteApplicationButton } from "@/components/delete-application-button";
 import { StatusPipeline } from "@/components/status-pipeline";
 import { SubmitButton } from "@/components/submit-button";
@@ -23,8 +23,8 @@ import {
   deleteContactAction,
   deleteFollowUpAction,
 } from "@/lib/actions";
-import { addDaysIso } from "@/lib/dates";
-import { formatDate, formatDateTime } from "@/lib/dates";
+import { atsLabel, isAtsPortalUrl } from "@/lib/ats";
+import { addDaysIso, formatDate, formatDateTime } from "@/lib/dates";
 import {
   getApplication,
   listActivities,
@@ -73,6 +73,7 @@ export default async function ApplicationDetailPage({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{app.company}</span>
             <PlatformBadge platform={app.platform} />
+            <AtsBadge ats={app.ats} />
             <StatusBadge status={app.status} />
           </div>
         </div>
@@ -105,15 +106,17 @@ export default async function ApplicationDetailPage({
             <Meta label="Location" value={app.location} />
             <Meta label="Applied" value={formatDate(app.applied_at)} />
             <Meta label="Compensation" value={salary} />
+            <Meta label="ATS" value={atsLabel(app.ats)} />
             <Meta
-              label="Job link"
+              className="sm:col-span-2"
+              label={isAtsPortalUrl(app.job_url) ? "ATS portal" : "Job link"}
               value={
                 app.job_url ? (
                   <a
                     href={app.job_url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                    className="inline-flex items-center gap-1 break-all text-primary hover:underline"
                   >
                     Open listing <ExternalLink className="size-3" />
                   </a>
@@ -253,9 +256,17 @@ export default async function ApplicationDetailPage({
   );
 }
 
-function Meta({ label, value }: { label: string; value: React.ReactNode }) {
+function Meta({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div>
+    <div className={className}>
       <p className="text-xs tracking-wide text-muted-foreground uppercase">{label}</p>
       <div className="mt-1 text-sm">{value || "—"}</div>
     </div>

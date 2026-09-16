@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS applications (
   company TEXT NOT NULL,
   role TEXT NOT NULL,
   platform TEXT NOT NULL,
+  ats TEXT,
   status TEXT NOT NULL,
   location TEXT,
   job_url TEXT,
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS activities (
 
 CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status);
 CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications(platform);
+CREATE INDEX IF NOT EXISTS idx_applications_ats ON applications(ats);
 CREATE INDEX IF NOT EXISTS idx_applications_updated ON applications(updated_at);
 CREATE INDEX IF NOT EXISTS idx_follow_ups_due ON follow_ups(due_at);
 CREATE INDEX IF NOT EXISTS idx_follow_ups_app ON follow_ups(application_id);
@@ -93,6 +95,23 @@ async function migrate(db: Client) {
   await db.execute("PRAGMA journal_mode = WAL");
   await db.execute("PRAGMA foreign_keys = ON");
   await db.executeMultiple(SCHEMA_SQL);
+  await ensureColumn(db, "applications", "ats", "TEXT");
+}
+
+async function ensureColumn(
+  db: Client,
+  table: string,
+  column: string,
+  definition: string
+) {
+  const info = await db.execute(`PRAGMA table_info(${table})`);
+  const exists = info.rows.some((row) => {
+    const name = (row as { name?: unknown }).name ?? row[1];
+    return String(name) === column;
+  });
+  if (!exists) {
+    await db.execute(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
 }
 
 async function initDb() {

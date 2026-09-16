@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { JobUrlAndAtsFields } from "@/components/ats-fields";
 import { PlatformSelect, StatusSelect } from "@/components/native-select";
 import { SubmitButton } from "@/components/submit-button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   createApplicationAction,
   updateApplicationAction,
@@ -36,20 +37,19 @@ export function ApplicationForm({ application }: { application?: Application }) 
             placeholder="Senior Engineer"
           />
         </Field>
-        <Field label="Platform" htmlFor="platform">
+        <Field label="Source" htmlFor="platform">
           <PlatformSelect id="platform" defaultValue={application?.platform} />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Job board or market you found the role on.
+          </p>
         </Field>
         <Field label="Status" htmlFor="status">
           <StatusSelect id="status" defaultValue={application?.status} />
         </Field>
-        <Field label="Location" htmlFor="location">
-          <Input
-            id="location"
-            name="location"
-            defaultValue={application?.location ?? ""}
-            placeholder="Remote · NYC"
-          />
-        </Field>
+        <JobUrlAndAtsFields
+          defaultUrl={application?.job_url}
+          defaultAts={application?.ats}
+        />
         <Field label="Applied on" htmlFor="applied_at">
           <Input
             id="applied_at"
@@ -58,13 +58,12 @@ export function ApplicationForm({ application }: { application?: Application }) 
             defaultValue={application?.applied_at ?? ""}
           />
         </Field>
-        <Field label="Job URL" htmlFor="job_url" className="sm:col-span-2">
+        <Field label="Location" htmlFor="location">
           <Input
-            id="job_url"
-            name="job_url"
-            type="url"
-            defaultValue={application?.job_url ?? ""}
-            placeholder="https://"
+            id="location"
+            name="location"
+            defaultValue={application?.location ?? ""}
+            placeholder="Remote · NYC · Berlin · Dubai"
           />
         </Field>
         <Field label="Salary min" htmlFor="salary_min">

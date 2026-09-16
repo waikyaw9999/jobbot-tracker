@@ -1,5 +1,11 @@
 import { cn } from "@/lib/utils";
-import { PLATFORMS, STATUSES, type Platform, type Status } from "@/lib/constants";
+import { ATS_GROUPS } from "@/lib/ats";
+import {
+  PLATFORM_GROUPS,
+  STATUSES,
+  type Platform,
+  type Status,
+} from "@/lib/constants";
 
 export function NativeSelect({
   className,
@@ -29,11 +35,52 @@ export function PlatformSelect({
 }) {
   return (
     <NativeSelect name={name} id={id} defaultValue={defaultValue ?? (includeAll ? "all" : "linkedin")}>
-      {includeAll ? <option value="all">All platforms</option> : null}
-      {PLATFORMS.map((p) => (
-        <option key={p.value} value={p.value}>
-          {p.label}
-        </option>
+      {includeAll ? <option value="all">All sources</option> : null}
+      {PLATFORM_GROUPS.map((group) => (
+        <optgroup key={group.region} label={group.label}>
+          {group.items.map((p) => (
+            <option key={p.value} value={p.value}>
+              {p.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </NativeSelect>
+  );
+}
+
+export function AtsSelect({
+  name = "ats",
+  defaultValue,
+  includeAll,
+  id,
+  value,
+  onChange,
+}: {
+  name?: string;
+  defaultValue?: string;
+  includeAll?: boolean;
+  id?: string;
+  value?: string;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <NativeSelect
+      name={onChange ? undefined : name}
+      id={id}
+      defaultValue={onChange ? undefined : defaultValue ?? (includeAll ? "all" : "unknown")}
+      value={onChange ? (value ?? "unknown") : undefined}
+      onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+    >
+      {includeAll ? <option value="all">All ATS</option> : null}
+      {ATS_GROUPS.map((group) => (
+        <optgroup key={group.group} label={group.label}>
+          {group.items.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </NativeSelect>
   );
@@ -78,6 +125,16 @@ export function statusTone(status: Status | string) {
   }
 }
 
-export function platformTone(_platform: Platform | string) {
+export function platformTone(_: Platform | string) {
   return "bg-secondary text-secondary-foreground ring-foreground/10";
+}
+
+export function atsTone(ats: string | null | undefined) {
+  if (!ats || ats === "unknown" || ats === "other") {
+    return "bg-muted text-muted-foreground ring-foreground/10";
+  }
+  if (ats === "career_site" || ats === "email_referral") {
+    return "bg-secondary text-secondary-foreground ring-foreground/10";
+  }
+  return "bg-primary/10 text-primary ring-primary/20";
 }

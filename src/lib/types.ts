@@ -1,3 +1,4 @@
+import type { AtsVendor } from "@/lib/ats";
 import type { Platform, Status } from "@/lib/constants";
 
 export type Application = {
@@ -5,6 +6,7 @@ export type Application = {
   company: string;
   role: string;
   platform: Platform;
+  ats: AtsVendor | null;
   status: Status;
   location: string | null;
   job_url: string | null;
@@ -72,10 +74,16 @@ export type DashboardStats = {
   sampleCount: number;
 };
 
+export type AtsCount = {
+  ats: AtsVendor;
+  count: number;
+};
+
 export type ApplicationInput = {
   company: string;
   role: string;
   platform: Platform;
+  ats?: AtsVendor | null;
   status: Status;
   location?: string | null;
   job_url?: string | null;
