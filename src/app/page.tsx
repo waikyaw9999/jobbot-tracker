@@ -145,23 +145,25 @@ export default async function DashboardPage() {
               </p>
             ) : (
               atsCounts.map((item) => (
-                  <Link
-                    key={item.ats}
-                    href={`/applications?ats=${item.ats}`}
-                    className="grid grid-cols-[8.5rem_1fr_2rem] items-center gap-3"
-                  >
-                    <span className="truncate text-sm">{atsLabel(item.ats)}</span>
-                    <span className="h-2 overflow-hidden rounded-full bg-muted">
-                      <span
-                        className="block h-full rounded-full bg-primary/80"
-                        style={{ width: `${(item.count / maxAts) * 100}%` }}
-                      />
-                    </span>
-                    <span className="text-right text-sm tabular-nums text-muted-foreground">
+                <Link
+                  key={item.ats}
+                  href={`/applications?ats=${item.ats}`}
+                  className="space-y-1.5"
+                >
+                  <span className="flex items-baseline justify-between gap-3">
+                    <span className="text-sm">{atsLabel(item.ats)}</span>
+                    <span className="text-sm tabular-nums text-muted-foreground">
                       {item.count}
                     </span>
-                  </Link>
-                ))
+                  </span>
+                  <span className="block h-2 overflow-hidden rounded-full bg-muted">
+                    <span
+                      className="block h-full rounded-full bg-primary/80"
+                      style={{ width: `${(item.count / maxAts) * 100}%` }}
+                    />
+                  </span>
+                </Link>
+              ))
             )}
           </CardContent>
         </Card>

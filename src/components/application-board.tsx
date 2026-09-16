@@ -26,7 +26,7 @@ export function ApplicationBoard({ applications }: { applications: Application[]
           return (
             <section
               key={column.status}
-              className="flex w-64 shrink-0 flex-col rounded-xl bg-card ring-1 ring-foreground/10"
+              className="flex w-56 shrink-0 flex-col rounded-xl bg-card ring-1 ring-foreground/10 lg:min-w-0 lg:flex-1"
             >
               <header className="flex items-baseline justify-between gap-2 px-3 py-2.5">
                 <div>
