@@ -1,10 +1,23 @@
-import { isPlatform, isStatus, platformLabel, statusLabel } from "@/lib/constants";
+import {
+  atsFromPlatform,
+  detectAtsFromUrl,
+  parseAts,
+  resolveAts,
+  atsLabel,
+} from "@/lib/ats";
+import {
+  isStatus,
+  parsePlatform,
+  platformLabel,
+  statusLabel,
+} from "@/lib/constants";
 import type { Application, ApplicationInput } from "@/lib/types";
 
 export const CSV_HEADERS = [
   "company",
   "role",
   "platform",
+  "ats",
   "status",
   "location",
   "job_url",
@@ -30,6 +43,7 @@ export function applicationsToCsv(rows: Application[]) {
         row.company,
         row.role,
         row.platform,
+        row.ats || "unknown",
         row.status,
         row.location,
         row.job_url,
@@ -87,6 +101,14 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((value) => value.trim().length > 0));
 }
 
+function headerIndex(header: string[], ...names: string[]) {
+  for (const name of names) {
+    const i = header.indexOf(name);
+    if (i >= 0) return i;
+  }
+  return -1;
+}
+
 export function csvToApplications(text: string): {
   rows: ApplicationInput[];
   errors: string[];
@@ -97,8 +119,20 @@ export function csvToApplications(text: string): {
   }
 
   const header = table[0].map((h) => h.trim().toLowerCase());
-  const index = Object.fromEntries(CSV_HEADERS.map((key) => [key, header.indexOf(key)]));
-  const missing = CSV_HEADERS.filter((key) => index[key] < 0 && (key === "company" || key === "role"));
+  const index: Record<(typeof CSV_HEADERS)[number], number> = {
+    company: headerIndex(header, "company"),
+    role: headerIndex(header, "role"),
+    platform: headerIndex(header, "platform", "source", "job_board"),
+    ats: headerIndex(header, "ats", "ats_vendor"),
+    status: headerIndex(header, "status"),
+    location: headerIndex(header, "location"),
+    job_url: headerIndex(header, "job_url", "url"),
+    salary_min: headerIndex(header, "salary_min"),
+    salary_max: headerIndex(header, "salary_max"),
+    notes: headerIndex(header, "notes"),
+    applied_at: headerIndex(header, "applied_at"),
+  };
+  const missing = (["company", "role"] as const).filter((key) => index[key] < 0);
   if (missing.length) {
     return {
       rows: [],
@@ -122,9 +156,9 @@ export function csvToApplications(text: string): {
       return;
     }
 
-    let platform = get("platform").toLowerCase() || "other";
-    if (platform === "greenhouse/lever") platform = "greenhouse";
-    if (!isPlatform(platform)) {
+    const platformRaw = get("platform") || "other";
+    const platform = parsePlatform(platformRaw);
+    if (!platform) {
       errors.push(
         `Line ${lineNo}: unknown platform "${get("platform")}" — use ${platformLabel("linkedin")} etc.`
       );
@@ -141,6 +175,19 @@ export function csvToApplications(text: string): {
       return;
     }
 
+    const jobUrl = get("job_url") || null;
+    const atsRaw = get("ats");
+    let ats = parseAts(atsRaw);
+    if (atsRaw && !ats) {
+      errors.push(
+        `Line ${lineNo}: unknown ATS "${atsRaw}" — use ${atsLabel("greenhouse")} etc.`
+      );
+      return;
+    }
+    if (!ats) {
+      ats = detectAtsFromUrl(jobUrl) ?? atsFromPlatform(platform) ?? "unknown";
+    }
+
     const salaryMin = get("salary_min");
     const salaryMax = get("salary_max");
 
@@ -148,9 +195,10 @@ export function csvToApplications(text: string): {
       company,
       role,
       platform,
+      ats: resolveAts(ats),
       status,
       location: get("location") || null,
-      job_url: get("job_url") || null,
+      job_url: jobUrl,
       salary_min: salaryMin ? Number(salaryMin) : null,
       salary_max: salaryMax ? Number(salaryMax) : null,
       notes: get("notes") || null,

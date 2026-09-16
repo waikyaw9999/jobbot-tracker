@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight, Briefcase, CalendarClock, Handshake, Timer } from "lucide-react";
 import { SampleBanner } from "@/components/sample-banner";
-import { PlatformBadge, StatusBadge } from "@/components/badges";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,19 +13,23 @@ import { statusLabel } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import {
   bucketFollowUps,
+  getAtsCounts,
   getDashboardStats,
   getPipelineCounts,
   listOpenFollowUps,
   listRecentActivity,
 } from "@/lib/queries";
+import { atsLabel } from "@/lib/ats";
 
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
   const pipeline = await getPipelineCounts();
+  const atsCounts = await getAtsCounts(6);
   const followUps = bucketFollowUps(await listOpenFollowUps());
   const activity = await listRecentActivity(8);
   const upcoming = [...followUps.today, ...followUps.week].slice(0, 6);
   const maxPipeline = Math.max(1, ...pipeline.map((p) => p.count));
+  const maxAts = Math.max(1, ...atsCounts.map((row) => row.count));
 
   return (
     <div className="space-y-6">
@@ -37,8 +40,8 @@ export default async function DashboardPage() {
           </p>
           <h1 className="font-heading text-3xl tracking-tight">Job search, in one place</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Track applications across LinkedIn, Indeed, Greenhouse, and the rest of the
-            board. Follow-ups auto-schedule 7 days after Applied.
+            Track applications across LinkedIn, Seek, StepStone, Bayt, and the rest
+            of the board — plus the ATS portal each one actually lands in.
           </p>
         </div>
         <Button asChild>
@@ -129,36 +132,71 @@ export default async function DashboardPage() {
         </Card>
       </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent activity</CardTitle>
-          <CardDescription>Status changes, contacts, follow-ups, and imports.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activity.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nothing yet — add an application to start the timeline.</p>
-          ) : (
-            <ol className="space-y-3">
-              {activity.map((item) => (
-                <li key={item.id} className="flex gap-3">
-                  <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary/70" />
-                  <div className="min-w-0">
-                    <Link
-                      href={`/applications/${item.application_id}`}
-                      className="text-sm font-medium hover:underline"
-                    >
-                      {item.company}
-                      <span className="text-muted-foreground"> · {item.role}</span>
-                    </Link>
-                    <p className="text-sm text-muted-foreground">{item.message}</p>
-                    <p className="text-xs text-muted-foreground/80">{formatDateTime(item.created_at)}</p>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-        </CardContent>
-      </Card>
+      <section className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Top ATS</CardTitle>
+            <CardDescription>Where applications were actually submitted.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {atsCounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Tag an ATS on an application to see a breakdown.
+              </p>
+            ) : (
+              atsCounts.map((item) => (
+                  <Link
+                    key={item.ats}
+                    href={`/applications?ats=${item.ats}`}
+                    className="grid grid-cols-[8.5rem_1fr_2rem] items-center gap-3"
+                  >
+                    <span className="truncate text-sm">{atsLabel(item.ats)}</span>
+                    <span className="h-2 overflow-hidden rounded-full bg-muted">
+                      <span
+                        className="block h-full rounded-full bg-primary/80"
+                        style={{ width: `${(item.count / maxAts) * 100}%` }}
+                      />
+                    </span>
+                    <span className="text-right text-sm tabular-nums text-muted-foreground">
+                      {item.count}
+                    </span>
+                  </Link>
+                ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Recent activity</CardTitle>
+            <CardDescription>Status changes, contacts, follow-ups, and imports.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {activity.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing yet — add an application to start the timeline.</p>
+            ) : (
+              <ol className="space-y-3">
+                {activity.map((item) => (
+                  <li key={item.id} className="flex gap-3">
+                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary/70" />
+                    <div className="min-w-0">
+                      <Link
+                        href={`/applications/${item.application_id}`}
+                        className="text-sm font-medium hover:underline"
+                      >
+                        {item.company}
+                        <span className="text-muted-foreground"> · {item.role}</span>
+                      </Link>
+                      <p className="text-sm text-muted-foreground">{item.message}</p>
+                      <p className="text-xs text-muted-foreground/80">{formatDateTime(item.created_at)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }

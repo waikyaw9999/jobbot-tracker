@@ -10,9 +10,9 @@ export function SampleBanner({ sampleCount, empty }: { sampleCount: number; empt
         <FlaskConical />
         <AlertTitle>Start with a live board or sample data</AlertTitle>
         <AlertDescription>
-          Add a real application, or load the SAMPLE set (12 fictional roles, mixed
-          platforms, overdue/today/week follow-ups). Sample rows are tagged and can be
-          cleared without touching your own data.
+          Add a real application, or load the SAMPLE set (15 fictional roles across
+          global boards and ATS vendors, overdue/today/week follow-ups). Sample rows
+          are tagged and can be cleared without touching your own data.
         </AlertDescription>
         <form action={seedSampleAction} className="mt-3">
           <SubmitButton>Load SAMPLE data</SubmitButton>

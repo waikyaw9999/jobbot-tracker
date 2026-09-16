@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { all, get, run } from "@/lib/db";
+import { isAts, resolveAts, type AtsVendor } from "@/lib/ats";
 import {
   PIPELINE_STATUSES,
   statusLabel,
@@ -14,6 +15,7 @@ import type {
   ActivityWithApp,
   Application,
   ApplicationInput,
+  AtsCount,
   Contact,
   ContactWithApp,
   DashboardStats,
@@ -29,6 +31,7 @@ export async function listApplications(filters?: {
   q?: string;
   status?: Status | "all";
   platform?: Platform | "all";
+  ats?: AtsVendor | "all";
 }) {
   const where: string[] = [];
   const params: Record<string, string> = {};
@@ -46,6 +49,14 @@ export async function listApplications(filters?: {
   if (filters?.platform && filters.platform !== "all") {
     where.push("platform = @platform");
     params.platform = filters.platform;
+  }
+  if (filters?.ats && filters.ats !== "all") {
+    if (filters.ats === "unknown") {
+      where.push("(ats IS NULL OR ats = @ats)");
+    } else {
+      where.push("ats = @ats");
+    }
+    params.ats = filters.ats;
   }
 
   const sql = `SELECT * FROM applications ${
@@ -80,10 +91,10 @@ export async function insertApplication(
 
   await run(
     `INSERT INTO applications (
-      id, company, role, platform, status, location, job_url,
+      id, company, role, platform, ats, status, location, job_url,
       salary_min, salary_max, notes, applied_at, created_at, updated_at, is_sample
     ) VALUES (
-      @id, @company, @role, @platform, @status, @location, @job_url,
+      @id, @company, @role, @platform, @ats, @status, @location, @job_url,
       @salary_min, @salary_max, @notes, @applied_at, @created_at, @updated_at, @is_sample
     )`,
     {
@@ -91,6 +102,7 @@ export async function insertApplication(
       company: input.company,
       role: input.role,
       platform: input.platform,
+      ats: resolveAts(input.ats),
       status,
       location: emptyToNull(input.location),
       job_url: emptyToNull(input.job_url),
@@ -135,6 +147,7 @@ export async function updateApplication(
       company = @company,
       role = @role,
       platform = @platform,
+      ats = @ats,
       status = @status,
       location = @location,
       job_url = @job_url,
@@ -149,6 +162,7 @@ export async function updateApplication(
       company: input.company,
       role: input.role,
       platform: input.platform,
+      ats: resolveAts(input.ats),
       status: input.status,
       location: emptyToNull(input.location),
       job_url: emptyToNull(input.job_url),
@@ -435,6 +449,21 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     offers: offersRow?.n ?? 0,
     sampleCount,
   };
+}
+
+export async function getAtsCounts(limit = 8): Promise<AtsCount[]> {
+  const rows = await all<{ ats: string | null; n: number }>(
+    `SELECT COALESCE(NULLIF(ats, ''), 'unknown') AS ats, COUNT(*) AS n
+     FROM applications
+     GROUP BY COALESCE(NULLIF(ats, ''), 'unknown')
+     ORDER BY n DESC, ats ASC
+     LIMIT ?`,
+    [limit]
+  );
+  return rows.map((row) => ({
+    ats: isAts(row.ats ?? "") ? (row.ats as AtsVendor) : "unknown",
+    count: row.n,
+  }));
 }
 
 export async function getPipelineCounts() {
