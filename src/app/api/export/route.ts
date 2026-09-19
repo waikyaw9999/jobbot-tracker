@@ -2,6 +2,7 @@ import { applicationsToCsv } from "@/lib/csv";
 import { listApplications } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function GET() {
   const csv = applicationsToCsv(await listApplications());
