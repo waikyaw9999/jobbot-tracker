@@ -13,6 +13,10 @@ import {
 
 const DB_PATH = path.join(process.cwd(), "data", "jobbot.sqlite");
 
+type LibsqlConnection =
+  | { kind: "remote"; url: string; authToken?: string }
+  | { kind: "file"; url: string; filePath: string };
+
 type Executor = Pick<Client, "execute">;
 type GlobalDb = typeof globalThis & {
   __jobbotDb?: Client;
@@ -91,8 +95,44 @@ function sqliteFileUrl(filePath: string) {
   return `file:${absolute}`;
 }
 
-async function migrate(db: Client) {
-  await db.execute("PRAGMA journal_mode = WAL");
+function envValue(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim();
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function isRemoteLibsqlUrl(url: string) {
+  return /^(libsql|https?):\/\//i.test(url);
+}
+
+function isServerlessRuntime() {
+  return Boolean(process.env.VERCEL);
+}
+
+function resolveLibsqlConnection(): LibsqlConnection {
+  const url = envValue("LIBSQL_URL", "TURSO_DATABASE_URL");
+  const authToken = envValue("LIBSQL_AUTH_TOKEN", "TURSO_AUTH_TOKEN");
+
+  if (url && isRemoteLibsqlUrl(url)) {
+    return { kind: "remote", url, authToken };
+  }
+
+  if (isServerlessRuntime()) {
+    throw new Error(
+      "Remote libSQL is required on Vercel. Set TURSO_DATABASE_URL (or LIBSQL_URL) and TURSO_AUTH_TOKEN (or LIBSQL_AUTH_TOKEN). Local file SQLite cannot persist on the serverless filesystem."
+    );
+  }
+
+  return { kind: "file", url: sqliteFileUrl(DB_PATH), filePath: DB_PATH };
+}
+
+async function migrate(db: Client, kind: LibsqlConnection["kind"]) {
+  // WAL is a local-file journal mode; skip it on Turso / remote libSQL.
+  if (kind === "file") {
+    await db.execute("PRAGMA journal_mode = WAL");
+  }
   await db.execute("PRAGMA foreign_keys = ON");
   await db.executeMultiple(SCHEMA_SQL);
   await ensureColumn(db, "applications", "ats", "TEXT");
@@ -115,9 +155,17 @@ async function ensureColumn(
 }
 
 async function initDb() {
-  fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = createClient({ url: sqliteFileUrl(DB_PATH) });
-  await migrate(db);
+  const connection = resolveLibsqlConnection();
+  if (connection.kind === "file") {
+    fs.mkdirSync(path.dirname(connection.filePath), { recursive: true });
+  }
+
+  const db = createClient(
+    connection.kind === "remote"
+      ? { url: connection.url, authToken: connection.authToken }
+      : { url: connection.url }
+  );
+  await migrate(db, connection.kind);
   return db;
 }
 
