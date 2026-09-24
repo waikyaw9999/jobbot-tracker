@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { CsvImportForm } from "@/components/csv-import-form";
 import { SampleBanner } from "@/components/sample-banner";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,11 @@ export default async function DataPage() {
       <header>
         <h1 className="font-heading text-3xl tracking-tight">Import / Export</h1>
         <p className="text-sm text-muted-foreground">
-          CSV round-trip for the local SQLite file. Nothing leaves this machine.
+          CSV round-trip for applications. Job-alert digests belong in{" "}
+          <Link href="/opportunities/import" className="underline-offset-4 hover:underline">
+            Opportunities → Import digest
+          </Link>
+          . Nothing leaves this machine.
         </p>
       </header>
 

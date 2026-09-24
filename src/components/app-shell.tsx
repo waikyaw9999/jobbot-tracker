@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import {
   Briefcase,
   CalendarClock,
+  Database,
   LayoutDashboard,
   Menu,
   Plus,
+  Radar,
   Sparkles,
   Users,
-  Database,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/opportunities", label: "Opportunities", icon: Radar },
   { href: "/applications", label: "Applications", icon: Briefcase },
   { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock },
   { href: "/contacts", label: "Contacts", icon: Users },

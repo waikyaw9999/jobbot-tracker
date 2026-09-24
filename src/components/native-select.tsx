@@ -109,8 +109,7 @@ export function StatusSelect({
   );
 }
 
-export function statusTone(status: Status | string) {
-  const tone = STATUSES.find((s) => s.value === status)?.tone ?? "muted";
+export function toneClass(tone: string) {
   switch (tone) {
     case "info":
       return "bg-sky-500/12 text-sky-800 ring-sky-500/20 dark:text-sky-200";
@@ -123,6 +122,11 @@ export function statusTone(status: Status | string) {
     default:
       return "bg-muted text-muted-foreground ring-foreground/10";
   }
+}
+
+export function statusTone(status: Status | string) {
+  const tone = STATUSES.find((s) => s.value === status)?.tone ?? "muted";
+  return toneClass(tone);
 }
 
 export function platformTone(_: Platform | string) {

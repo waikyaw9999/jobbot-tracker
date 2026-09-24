@@ -85,6 +85,93 @@ CREATE INDEX IF NOT EXISTS idx_follow_ups_app ON follow_ups(application_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_app ON contacts(application_id);
 CREATE INDEX IF NOT EXISTS idx_activities_app ON activities(application_id);
 CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at);
+
+CREATE TABLE IF NOT EXISTS search_preferences (
+  id TEXT PRIMARY KEY,
+  include_titles TEXT NOT NULL DEFAULT '',
+  exclude_keywords TEXT NOT NULL DEFAULT '',
+  markets TEXT NOT NULL DEFAULT '',
+  market_codes TEXT NOT NULL DEFAULT '["SG","TH","AU"]',
+  min_seniority TEXT NOT NULL DEFAULT 'senior',
+  require_sponsorship_au INTEGER NOT NULL DEFAULT 1,
+  never_invent_email INTEGER NOT NULL DEFAULT 1,
+  sources TEXT NOT NULL DEFAULT '[]',
+  stack_keywords TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  location TEXT,
+  source TEXT NOT NULL,
+  job_url TEXT,
+  url_key TEXT,
+  company_title_key TEXT NOT NULL,
+  ats TEXT,
+  market TEXT,
+  seniority TEXT,
+  tech_tags TEXT,
+  visa_note TEXT,
+  sponsorship TEXT NOT NULL DEFAULT 'unknown',
+  nationality_constraint TEXT,
+  fit TEXT,
+  fit_score INTEGER,
+  fit_reason TEXT,
+  status TEXT NOT NULL,
+  skip_reason TEXT,
+  posted_at TEXT,
+  discovered_at TEXT NOT NULL,
+  notes TEXT,
+  cover_letter TEXT,
+  application_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_opportunities_source ON opportunities(source);
+CREATE INDEX IF NOT EXISTS idx_opportunities_updated ON opportunities(updated_at);
+CREATE INDEX IF NOT EXISTS idx_opportunities_title_key ON opportunities(company_title_key);
+CREATE INDEX IF NOT EXISTS idx_opportunities_url_key ON opportunities(url_key);
+CREATE INDEX IF NOT EXISTS idx_opportunities_application ON opportunities(application_id);
+CREATE INDEX IF NOT EXISTS idx_opportunities_market ON opportunities(market);
+
+CREATE TABLE IF NOT EXISTS opportunity_contacts (
+  opportunity_id TEXT PRIMARY KEY,
+  email TEXT,
+  channel TEXT NOT NULL DEFAULT 'portal',
+  verified INTEGER NOT NULL DEFAULT 0,
+  verification_note TEXT,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS opportunity_drafts (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT NOT NULL,
+  to_address TEXT,
+  subject TEXT,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_opportunity_drafts_listing ON opportunity_drafts(opportunity_id, created_at);
+
+CREATE TABLE IF NOT EXISTS opportunity_events (
+  id TEXT PRIMARY KEY,
+  opportunity_id TEXT,
+  type TEXT NOT NULL,
+  message TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (opportunity_id) REFERENCES opportunities(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_opportunity_events_created ON opportunity_events(created_at);
 `;
 
 function sqliteFileUrl(filePath: string) {
@@ -136,6 +223,17 @@ async function migrate(db: Client, kind: LibsqlConnection["kind"]) {
   await db.execute("PRAGMA foreign_keys = ON");
   await db.executeMultiple(SCHEMA_SQL);
   await ensureColumn(db, "applications", "ats", "TEXT");
+  await ensureColumn(db, "opportunities", "market", "TEXT");
+  await ensureColumn(db, "opportunities", "seniority", "TEXT");
+  await ensureColumn(db, "opportunities", "tech_tags", "TEXT");
+  await ensureColumn(db, "opportunities", "posted_at", "TEXT");
+  await ensureColumn(db, "opportunities", "sponsorship", "TEXT NOT NULL DEFAULT 'unknown'");
+  await ensureColumn(db, "opportunities", "nationality_constraint", "TEXT");
+  await ensureColumn(db, "opportunities", "skip_reason", "TEXT");
+  await ensureColumn(db, "search_preferences", "market_codes", `TEXT NOT NULL DEFAULT '["SG","TH","AU"]'`);
+  await ensureColumn(db, "search_preferences", "min_seniority", "TEXT NOT NULL DEFAULT 'senior'");
+  await ensureColumn(db, "search_preferences", "require_sponsorship_au", "INTEGER NOT NULL DEFAULT 1");
+  await ensureColumn(db, "search_preferences", "never_invent_email", "INTEGER NOT NULL DEFAULT 1");
 }
 
 async function ensureColumn(

@@ -25,6 +25,7 @@ import {
 } from "@/lib/actions";
 import { atsLabel, isAtsPortalUrl } from "@/lib/ats";
 import { addDaysIso, formatDate, formatDateTime } from "@/lib/dates";
+import { listOpportunitiesForApplication } from "@/lib/opportunity-queries";
 import {
   getApplication,
   listActivities,
@@ -44,6 +45,7 @@ export default async function ApplicationDetailPage({
   const followUps = await listFollowUps(id);
   const contacts = await listContacts(id);
   const activities = await listActivities(id);
+  const linkedOpportunities = await listOpportunitiesForApplication(id);
   const salary =
     app.salary_min || app.salary_max
       ? [app.salary_min, app.salary_max]
@@ -76,6 +78,19 @@ export default async function ApplicationDetailPage({
             <AtsBadge ats={app.ats} />
             <StatusBadge status={app.status} />
           </div>
+          {linkedOpportunities.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              From{" "}
+              {linkedOpportunities.map((item, index) => (
+                <span key={item.id}>
+                  {index > 0 ? ", " : null}
+                  <Link href={`/opportunities/${item.id}`} className="text-foreground hover:underline">
+                    {item.title}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild variant="outline" size="sm">
