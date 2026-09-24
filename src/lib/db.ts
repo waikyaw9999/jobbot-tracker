@@ -85,6 +85,48 @@ CREATE INDEX IF NOT EXISTS idx_follow_ups_app ON follow_ups(application_id);
 CREATE INDEX IF NOT EXISTS idx_contacts_app ON contacts(application_id);
 CREATE INDEX IF NOT EXISTS idx_activities_app ON activities(application_id);
 CREATE INDEX IF NOT EXISTS idx_activities_created ON activities(created_at);
+
+CREATE TABLE IF NOT EXISTS search_preferences (
+  id TEXT PRIMARY KEY,
+  include_titles TEXT NOT NULL DEFAULT '',
+  exclude_keywords TEXT NOT NULL DEFAULT '',
+  markets TEXT NOT NULL DEFAULT '',
+  sources TEXT NOT NULL DEFAULT '[]',
+  stack_keywords TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  company TEXT NOT NULL,
+  location TEXT,
+  source TEXT NOT NULL,
+  job_url TEXT,
+  url_key TEXT,
+  company_title_key TEXT NOT NULL,
+  ats TEXT,
+  visa_note TEXT,
+  fit TEXT,
+  fit_score INTEGER,
+  fit_reason TEXT,
+  status TEXT NOT NULL,
+  discovered_at TEXT NOT NULL,
+  notes TEXT,
+  cover_letter TEXT,
+  application_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY (application_id) REFERENCES applications(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_opportunities_status ON opportunities(status);
+CREATE INDEX IF NOT EXISTS idx_opportunities_source ON opportunities(source);
+CREATE INDEX IF NOT EXISTS idx_opportunities_updated ON opportunities(updated_at);
+CREATE INDEX IF NOT EXISTS idx_opportunities_title_key ON opportunities(company_title_key);
+CREATE INDEX IF NOT EXISTS idx_opportunities_url_key ON opportunities(url_key);
+CREATE INDEX IF NOT EXISTS idx_opportunities_application ON opportunities(application_id);
 `;
 
 function sqliteFileUrl(filePath: string) {

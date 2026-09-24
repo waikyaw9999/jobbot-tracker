@@ -216,6 +216,14 @@ export async function updateApplicationStatus(applicationId: string, status: Sta
 }
 
 export async function deleteApplication(applicationId: string) {
+  await run(
+    `UPDATE opportunities
+     SET application_id = NULL,
+         status = CASE WHEN status = 'promoted' THEN 'draft_ready' ELSE status END,
+         updated_at = ?
+     WHERE application_id = ?`,
+    [nowIso(), applicationId]
+  );
   await run("DELETE FROM applications WHERE id = ?", [applicationId]);
 }
 

@@ -24,7 +24,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: "JobBot Tracker",
   description:
-    "Local-first job-search tracker for applications, follow-ups, contacts, and activity.",
+    "Local-first job-search tracker for opportunities, applications, follow-ups, contacts, and activity.",
 };
 
 export const dynamic = "force-dynamic";

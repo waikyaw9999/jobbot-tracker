@@ -4,13 +4,16 @@ Local-first job-search tracker. Applications, follow-ups, contacts, and an activ
 
 ## Features
 
-- **Applications CRUD** across global job boards (LinkedIn, Indeed, Seek, StepStone, Reed, Bayt, JobsDB, JobStreet, Welcome to the Jungle, and more) plus email, referral, and company career sites
+- **Opportunities inbox** — capture roles before you apply: status (`new`, `worth a look`, `draft ready`, `skipped`, `promoted`), visa note, fit, source, and a cover-letter draft. **Promote to application** creates a Saved row in the pipeline and links it. JobBot never auto-applies and never sends email
+- **Assist profile** — editable search preferences (titles, exclude keywords, markets, preferred sources, stack keywords, cover-letter tone). Seeded for a senior full-stack / tech-lead search across Singapore, Thailand, and Australia (visa sponsor), including LinkedIn, JobStreet, JobsDB, Indeed, Jaabz, Ashby, and Michael Page
+- **Digest import and URL add** — paste or upload a markdown table / CSV (status, role, company, location, source, visa, fit, url, optional cover letter). Duplicates are skipped. Pasting a listing URL pre-fills source and ATS from the host. Fit hints are local keyword overlap — no model API key
+- **Applications CRUD** across global job boards (LinkedIn, Indeed, Seek, StepStone, Reed, Bayt, JobsDB, JobStreet, Jaabz, Michael Page, Welcome to the Jungle, and more) plus email, referral, Ashby, and company career sites
 - **ATS tagging** — record which applicant-tracking vendor you actually applied through (Greenhouse, Workday, Lever, Ashby, Personio, Taleo, SuccessFactors, …), separate from the job-board *source*. Includes Unknown / Other / company career site / email-referral. Known portal URLs (for example `boards.greenhouse.io`, `*.myworkdayjobs.com`, `jobs.lever.co`) pre-fill the ATS; you can always override
 - **Status pipeline:** Saved → Applied → Recruiter screen → Hiring manager → Interview → Offer, plus Accepted / Rejected / Withdrawn / Ghosted. List and kanban-style **board** views
 - **Follow-ups** grouped as overdue / today / this week / later. Moving a role to **Applied** schedules a 7-day follow-up when none is open
 - **Contacts** per application (recruiter, hiring manager, referral)
 - **Activity timeline** for status changes, notes, follow-ups, contacts, and imports
-- **Dashboard** with pipeline counts, top ATS used, KPIs, and recent activity
+- **Dashboard** with opportunity counts (new, draft ready, worth a look), pipeline counts, top ATS used, KPIs, and recent activity
 - **CSV import / export**
 - **Dark mode**
 - **SAMPLE seed data** with a one-click clear-sample path (sample rows are tagged and never mixed into your own data when you clear them)
@@ -55,7 +58,18 @@ Prefer Node 20 or 22 LTS over Node 24 if you can. This app does not need Node 24
 
 `.gitignore` excludes `node_modules/`, `.next/`, `.env*` (except `.env.example`), `data/*.sqlite`, `data/*.sqlite-*`, `data/*.db`, `*.sqlite-wal`, and `*.sqlite-shm`.
 
-Existing databases pick up the optional `ats` column on next launch (`ALTER TABLE` if missing). Older rows stay `NULL` / Unknown until you edit them.
+Existing databases pick up the optional `ats` column on next launch (`ALTER TABLE` if missing). Older rows stay `NULL` / Unknown until you edit them. The same launch creates `opportunities` and `search_preferences` if they are missing (`CREATE TABLE IF NOT EXISTS`). The Assist profile is inserted the first time preferences are read, and you can edit or reset it under **Opportunities → Assist profile**.
+
+## Opportunities and Assist
+
+Open **Opportunities** to triage roles the way a daily job-alert digest does: research and cover-letter drafts only.
+
+1. Review **Assist profile** (titles, markets, sources, stack, tone notes). Defaults match a senior full-stack / tech-lead search and stay editable.
+2. **Add opportunity** and paste a LinkedIn, JobStreet, JobsDB, Indeed, Jaabz, Ashby, Greenhouse, or Michael Page URL. The source and ATS fill in when the host is recognized. Type the role and company yourself — v1 does not scrape listings.
+3. **Suggest** fit (Excellent / Strong / Good / Stretch) from title and stack overlap. **Import digest** accepts a markdown table or CSV. Rows whose company + title or job URL already exist are skipped. Optional: record digest rows marked `applied` into the pipeline; leave that off and they stay as drafts.
+4. Triage with Skip, Worth a look, or Draft ready. **Promote to application** creates a **Saved** application (company, role, source, ATS, URL, visa/fit notes) and sets the opportunity to `promoted`. Copy the cover letter from the opportunity when you decide to send it.
+
+No Gmail, LinkedIn, or other API keys are required.
 
 ### SAMPLE data
 

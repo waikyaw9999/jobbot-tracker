@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { ArrowUpRight, Briefcase, CalendarClock, Handshake, Timer } from "lucide-react";
+import { ArrowUpRight, Briefcase, CalendarClock, Handshake, Radar, Timer } from "lucide-react";
+import { FitBadge } from "@/components/badges";
 import { SampleBanner } from "@/components/sample-banner";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +13,10 @@ import {
 import { statusLabel } from "@/lib/constants";
 import { formatDate, formatDateTime } from "@/lib/dates";
 import {
+  getOpportunityCounts,
+  listDraftReadyOpportunities,
+} from "@/lib/opportunity-queries";
+import {
   bucketFollowUps,
   getAtsCounts,
   getDashboardStats,
@@ -23,6 +28,8 @@ import { atsLabel } from "@/lib/ats";
 
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
+  const opportunities = await getOpportunityCounts();
+  const drafts = await listDraftReadyOpportunities(5);
   const pipeline = await getPipelineCounts();
   const atsCounts = await getAtsCounts(6);
   const followUps = bucketFollowUps(await listOpenFollowUps());
@@ -40,13 +47,18 @@ export default async function DashboardPage() {
           </p>
           <h1 className="font-heading text-3xl tracking-tight">Job search, in one place</h1>
           <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-            Track applications across LinkedIn, Seek, StepStone, Bayt, and the rest
-            of the board — plus the ATS portal each one actually lands in.
+            Triage opportunities, then track applications across LinkedIn, Seek, StepStone,
+            Bayt, and the rest of the board — plus the ATS portal each one actually lands in.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/applications/new">Add application</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/opportunities">Opportunities</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/applications/new">Add application</Link>
+          </Button>
+        </div>
       </header>
 
       <SampleBanner sampleCount={stats.sampleCount} empty={stats.total === 0} />
@@ -77,6 +89,73 @@ export default async function DashboardPage() {
           value={`${stats.interviews} / ${stats.offers}`}
           hint="Live conversations"
         />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Radar className="size-4" />
+              Opportunities
+            </CardTitle>
+            <CardDescription>
+              {opportunities.skipped} skipped · {opportunities.promoted} promoted
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <OpportunityCount
+              href="/opportunities?status=new"
+              label="New"
+              count={opportunities.new}
+              max={Math.max(1, opportunities.new, opportunities.draft_ready, opportunities.worth_a_look)}
+            />
+            <OpportunityCount
+              href="/opportunities?status=draft_ready"
+              label="Draft ready"
+              count={opportunities.draft_ready}
+              max={Math.max(1, opportunities.new, opportunities.draft_ready, opportunities.worth_a_look)}
+            />
+            <OpportunityCount
+              href="/opportunities?status=worth_a_look"
+              label="Worth a look"
+              count={opportunities.worth_a_look}
+              max={Math.max(1, opportunities.new, opportunities.draft_ready, opportunities.worth_a_look)}
+            />
+            <Button asChild variant="outline" size="sm">
+              <Link href="/opportunities">Open inbox</Link>
+            </Button>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle>Draft ready</CardTitle>
+            <CardDescription>Cover-letter drafts waiting for you to review. Nothing is sent automatically.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {drafts.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No drafts yet. Import a digest or mark a role draft ready.
+              </p>
+            ) : (
+              drafts.map((item) => (
+                <Link
+                  key={item.id}
+                  href={`/opportunities/${item.id}`}
+                  className="flex items-start justify-between gap-3 rounded-lg px-1 py-1 hover:bg-muted/60"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{item.company}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {item.title}
+                      {item.location ? ` · ${item.location}` : ""}
+                    </p>
+                  </div>
+                  <FitBadge fit={item.fit} />
+                </Link>
+              ))
+            )}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-5">
@@ -233,6 +312,31 @@ function StatCard({
       </CardHeader>
       <CardContent className="text-xs text-muted-foreground">{hint}</CardContent>
     </Card>
+  );
+}
+
+function OpportunityCount({
+  href,
+  label,
+  count,
+  max,
+}: {
+  href: string;
+  label: string;
+  count: number;
+  max: number;
+}) {
+  return (
+    <Link href={href} className="grid grid-cols-[8.5rem_1fr_2rem] items-center gap-3">
+      <span className="text-sm">{label}</span>
+      <span className="h-2 overflow-hidden rounded-full bg-muted">
+        <span
+          className="block h-full rounded-full bg-primary"
+          style={{ width: `${(count / max) * 100}%` }}
+        />
+      </span>
+      <span className="text-right text-sm tabular-nums text-muted-foreground">{count}</span>
+    </Link>
   );
 }
 

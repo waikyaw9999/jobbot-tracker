@@ -382,6 +382,7 @@ const ATS_ALIASES: Record<string, AtsVendor> = {
 const PLATFORM_ATS_HINTS: Record<string, AtsVendor> = {
   greenhouse: "greenhouse",
   lever: "lever",
+  ashby: "ashby",
   email: "email_referral",
   referral: "email_referral",
   company_site: "career_site",
