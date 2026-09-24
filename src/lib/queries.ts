@@ -216,14 +216,33 @@ export async function updateApplicationStatus(applicationId: string, status: Sta
 }
 
 export async function deleteApplication(applicationId: string) {
+  const linked = await all<{ id: string; status: string }>(
+    "SELECT id, status FROM opportunities WHERE application_id = ?",
+    [applicationId]
+  );
+  const now = nowIso();
   await run(
     `UPDATE opportunities
      SET application_id = NULL,
          status = CASE WHEN status = 'promoted' THEN 'draft_ready' ELSE status END,
          updated_at = ?
      WHERE application_id = ?`,
-    [nowIso(), applicationId]
+    [now, applicationId]
   );
+  for (const row of linked) {
+    await run(
+      `INSERT INTO opportunity_events (id, opportunity_id, type, message, created_at)
+       VALUES (?, ?, 'unlinked', ?, ?)`,
+      [
+        id(),
+        row.id,
+        row.status === "promoted"
+          ? "Linked application was deleted. Status returned to draft ready."
+          : "Linked application was deleted.",
+        now,
+      ]
+    );
+  }
   await run("DELETE FROM applications WHERE id = ?", [applicationId]);
 }
 

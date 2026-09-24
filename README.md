@@ -62,12 +62,16 @@ Existing databases pick up the optional `ats` column on next launch (`ALTER TABL
 
 ## Opportunities and Assist
 
-Open **Opportunities** to triage roles the way a daily job-alert digest does: research and cover-letter drafts only.
+Open **Opportunities** to triage roles the way a daily job-alert digest does: research and cover-letter drafts only. This version stays on your machine (or Turso). It does not log into Gmail, scrape boards, or send anything.
 
-1. Review **Assist profile** (titles, markets, sources, stack, tone notes). Defaults match a senior full-stack / tech-lead search and stay editable.
-2. **Add opportunity** and paste a LinkedIn, JobStreet, JobsDB, Indeed, Jaabz, Ashby, Greenhouse, or Michael Page URL. The source and ATS fill in when the host is recognized. Type the role and company yourself — v1 does not scrape listings.
-3. **Suggest** fit (Excellent / Strong / Good / Stretch) from title and stack overlap. **Import digest** accepts a markdown table or CSV. Rows whose company + title or job URL already exist are skipped. Optional: record digest rows marked `applied` into the pipeline; leave that off and they stay as drafts.
-4. Triage with Skip, Worth a look, or Draft ready. **Promote to application** creates a **Saved** application (company, role, source, ATS, URL, visa/fit notes) and sets the opportunity to `promoted`. Copy the cover letter from the opportunity when you decide to send it.
+1. Review **Assist profile**. Markets default to Thailand, Singapore, and Australia. Set keywords, exclude keywords, minimum seniority, and the Australia sponsorship toggle. “Never invent email” stays on.
+2. **Add opportunity** and paste a LinkedIn, JobStreet, JobsDB, Indeed, Jaabz, Ashby, Greenhouse, or Michael Page URL. The source and ATS fill in when the host is recognized. Type the role and company yourself — v1 does not scrape listings. Market, seniority, tech tags, sponsorship, and an optional contact can be filled in on the same form.
+3. **Suggest** fit (Excellent / Strong / Good / Stretch) from title and stack overlap. Roles under your minimum seniority, or Australian roles with sponsorship marked no while that toggle is on, score as Stretch. **Import digest** accepts a markdown table or CSV from JobAlertsWatch. Rows are skipped when the normalized company + title or source URL already exists on an opportunity or an application. An imported email is stored only when the row marks it verified.
+4. Triage with Portal only, Draft ready, or Skip (optional skip reason). Worth a look and Closed are on the detail page. **Promote to application** creates a **Saved** application and sets the opportunity to `promoted`. The cover letter is stored as an in-app draft you can copy. It is not placed in Gmail.
+
+Contacts accept only an address you type or a verified import. Unverified addresses are dropped on import and are not copied into the draft recipient.
+
+Later, outside this version: create a Gmail draft from a stored letter. Still out of scope: auto-send, inventing emails, live board scrapes behind Cloudflare, Google Doc upload, a Michael Page session, and the Gmail API.
 
 No Gmail, LinkedIn, or other API keys are required.
 

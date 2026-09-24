@@ -15,9 +15,9 @@ export default async function PreferencesPage() {
         </p>
         <h1 className="font-heading text-3xl tracking-tight">Search preferences</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Titles, markets, sources, and stack keywords for fit hints. Saved in the same
-          SQLite or Turso database as your applications. JobBot does not scrape boards or
-          send applications from this profile.
+          Keywords, markets (Thailand, Singapore, and Australia by default), excludes, and the
+          Australia sponsorship toggle. Saved locally. JobBot does not scrape boards, invent
+          email addresses, or send applications from this profile.
         </p>
       </header>
       <div className="rounded-xl bg-card p-4 ring-1 ring-foreground/10 sm:p-6">

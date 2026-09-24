@@ -4,8 +4,11 @@ import {
   companyTitleKey,
   DIGEST_EXAMPLE,
   hintsFromJobUrl,
+  inferMarket,
   parseDigest,
+  parseSponsorship,
   scoreFit,
+  storableContactEmail,
   urlKeyOf,
   DEFAULT_SEARCH_PREFERENCES,
 } from "../src/lib/assist.ts";
@@ -81,5 +84,46 @@ assert.ok(stretch.excluded.includes("junior"));
 
 const strong = scoreFit({ title: "Tech Lead", notes: "Java services" }, prefs);
 assert.equal(strong.label, "Strong");
+
+assert.deepEqual(DEFAULT_SEARCH_PREFERENCES.market_codes, ["SG", "TH", "AU"]);
+assert.equal(DEFAULT_SEARCH_PREFERENCES.never_invent_email, 1);
+assert.equal(inferMarket("Bangkok"), "TH");
+assert.equal(inferMarket("Sydney"), "AU");
+assert.equal(parseSponsorship("482 sponsor"), "yes");
+assert.equal(parseSponsorship("local only"), "no");
+assert.equal(storableContactEmail("recruiter@contoso.com", { userEntered: false, verified: false }), null);
+assert.equal(
+  storableContactEmail("recruiter@contoso.com", { userEntered: false, verified: true }),
+  "recruiter@contoso.com"
+);
+
+const below = scoreFit({ title: "Mid Full Stack Engineer", notes: "Java Spring Python React AWS" }, prefs);
+assert.equal(below.label, "Stretch");
+assert.match(below.reason, /below senior seniority/);
+
+const noSponsor = scoreFit(
+  { title: "Senior Full Stack Engineer", location: "Sydney", sponsorship: "no", notes: "Java Spring Python React AWS" },
+  prefs
+);
+assert.equal(noSponsor.label, "Stretch");
+assert.match(noSponsor.reason, /AU sponsorship required/);
+
+const portal = parseDigest(`## Portal only
+
+| Role | Company | Location | Source | Visa | Fit | URL |
+| --- | --- | --- | --- | --- | --- | --- |
+| Staff Engineer | AdventureWorks | Singapore | LinkedIn | — | Strong | https://www.linkedin.com/jobs/view/555 |
+`);
+assert.equal(portal.rows[0]?.digestStatus, "portal_only");
+assert.equal(portal.rows[0]?.marketCode, "SG");
+
+const verified = parseDigest(`status,role,company,location,source,email,verified,subject
+draft ready,Senior Engineer,Fabrikam,Singapore,LinkedIn,jobs@fabrikam.example,yes,Senior Engineer at Fabrikam
+new,Senior Engineer,Tailspin,Bangkok,JobStreet,guess@tailspin.example,no,
+`);
+assert.equal(verified.rows[0]?.contactVerified, true);
+assert.equal(verified.rows[0]?.contactEmail, "jobs@fabrikam.example");
+assert.equal(verified.rows[1]?.contactVerified, false);
+assert.equal(verified.rows[1]?.marketCode, "TH");
 
 console.log("assist checks passed");

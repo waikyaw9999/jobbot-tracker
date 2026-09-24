@@ -13,21 +13,36 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  isMarketCode,
   isOpportunityStatus,
+  MARKETS,
   marketChips,
+  marketLabel,
   OPPORTUNITY_STATUSES,
   opportunityStatusLabel,
   parseSourceList,
 } from "@/lib/assist";
 import { isPlatform, platformLabel, type Platform } from "@/lib/constants";
-import { formatDate } from "@/lib/dates";
-import { getOpportunityCounts, getSearchPreferences, listOpportunities } from "@/lib/opportunity-queries";
+import { formatDate, formatDateTime } from "@/lib/dates";
+import {
+  getOpportunityCounts,
+  getSearchPreferences,
+  listOpportunities,
+  listRecentOpportunityEvents,
+} from "@/lib/opportunity-queries";
 import type { OpportunityStatus } from "@/lib/types";
 
 export default async function OpportunitiesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; source?: string; market?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    status?: string;
+    source?: string;
+    market?: string;
+    marketCode?: string;
+    tech?: string;
+  }>;
 }) {
   const params = await searchParams;
   const q = params.q ?? "";
@@ -38,10 +53,13 @@ export default async function OpportunitiesPage({
   const source =
     params.source && isPlatform(params.source) ? (params.source as Platform) : "all";
   const market = params.market ?? "";
-  const [opportunities, counts, preferences] = await Promise.all([
-    listOpportunities({ q, status, source, market }),
+  const marketCode = params.marketCode && isMarketCode(params.marketCode) ? params.marketCode : "";
+  const tech = params.tech ?? "";
+  const [opportunities, counts, preferences, events] = await Promise.all([
+    listOpportunities({ q, status, source, market, marketCode, tech }),
     getOpportunityCounts(),
     getSearchPreferences(),
+    listRecentOpportunityEvents(6),
   ]);
   const chips = marketChips(preferences.markets);
   const preferred = parseSourceList(preferences.sources)
@@ -75,13 +93,13 @@ export default async function OpportunitiesPage({
       </header>
 
       <div className="flex flex-wrap gap-2">
-        <CountLink label="All" count={counts.total} href={href({ q, source, market })} active={status === "all"} />
+        <CountLink label="All" count={counts.total} href={href({ q, source, market, marketCode, tech })} active={status === "all"} />
         {OPPORTUNITY_STATUSES.map((item) => (
           <CountLink
             key={item.value}
             label={item.label}
             count={counts[item.value]}
-            href={href({ q, status: item.value, source, market })}
+            href={href({ q, status: item.value, source, market, marketCode, tech })}
             active={status === item.value}
           />
         ))}
@@ -96,7 +114,16 @@ export default async function OpportunitiesPage({
         />
         <NativeStatus status={status} />
         <PlatformSelect name="source" includeAll defaultValue={source} />
-        <Input name="market" placeholder="Market or city" defaultValue={market} />
+        <NativeSelect name="marketCode" defaultValue={marketCode}>
+          <option value="">All markets</option>
+          {MARKETS.map((item) => (
+            <option key={item.value} value={item.value}>
+              {item.label}
+            </option>
+          ))}
+        </NativeSelect>
+        <Input name="tech" placeholder="Tech tag" defaultValue={tech} />
+        <Input name="market" placeholder="City or market note" defaultValue={market} className="lg:col-span-2" />
         <Button type="submit" variant="secondary">
           Filter
         </Button>
@@ -114,6 +141,8 @@ export default async function OpportunitiesPage({
                   status,
                   source,
                   market: active ? "" : chip.query,
+                  marketCode,
+                  tech,
                 })}
                 className={`rounded-full px-2.5 py-1 text-xs ring-1 ring-foreground/10 ${
                   active ? "bg-primary text-primary-foreground" : "bg-card hover:bg-muted"
@@ -123,6 +152,19 @@ export default async function OpportunitiesPage({
               </Link>
             );
           })}
+        </div>
+      ) : null}
+
+      {events.length ? (
+        <div className="rounded-xl bg-card px-3 py-2 text-xs text-muted-foreground ring-1 ring-foreground/10">
+          <p className="font-medium text-foreground">Recent activity</p>
+          <ul className="mt-1 space-y-1">
+            {events.map((event) => (
+              <li key={event.id}>
+                {formatDateTime(event.created_at)} · {event.message}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -163,7 +205,13 @@ export default async function OpportunitiesPage({
                         <span className="block text-muted-foreground">{opportunity.title}</span>
                       </Link>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {[opportunity.location, opportunity.visa_note].filter(Boolean).join(" · ") || "—"}
+                        {[
+                          opportunity.market ? marketLabel(opportunity.market) : null,
+                          opportunity.location,
+                          opportunity.tech_tags,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ") || "—"}
                         {opportunity.duplicate ? (
                           <span className="ml-2 text-amber-800 dark:text-amber-200">Possible duplicate</span>
                         ) : null}
@@ -208,7 +256,13 @@ export default async function OpportunitiesPage({
                   <PlatformBadge platform={opportunity.source} />
                   <FitBadge fit={opportunity.fit} />
                   <span className="text-xs text-muted-foreground">
-                    {[opportunity.location, opportunity.visa_note].filter(Boolean).join(" · ")}
+                    {[
+                      opportunity.market ? marketLabel(opportunity.market) : null,
+                      opportunity.location,
+                      opportunity.tech_tags,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 </div>
                 {opportunity.duplicate ? (
@@ -273,12 +327,16 @@ function href(input: {
   status?: OpportunityStatus | "all";
   source?: Platform | "all";
   market?: string;
+  marketCode?: string;
+  tech?: string;
 }) {
   const params = new URLSearchParams();
   if (input.q) params.set("q", input.q);
   if (input.status && input.status !== "all") params.set("status", input.status);
   if (input.source && input.source !== "all") params.set("source", input.source);
   if (input.market) params.set("market", input.market);
+  if (input.marketCode) params.set("marketCode", input.marketCode);
+  if (input.tech) params.set("tech", input.tech);
   const query = params.toString();
   return query ? `/opportunities?${query}` : "/opportunities";
 }

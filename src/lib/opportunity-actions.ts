@@ -6,7 +6,11 @@ import { isAts, resolveAts, type AtsVendor } from "@/lib/ats";
 import {
   companyTitleKey,
   DEFAULT_SEARCH_PREFERENCES,
+  isContactChannel,
+  isMarketCode,
   isOpportunityStatus,
+  isSponsorship,
+  looksLikeEmail,
   normalizeDate,
   parseDigest,
   urlKeyOf,
@@ -14,6 +18,7 @@ import {
 import { isPlatform, type Platform } from "@/lib/constants";
 import { todayIso } from "@/lib/dates";
 import {
+  addOpportunityEvent,
   deleteOpportunity,
   findDuplicates,
   getOpportunity,
@@ -25,7 +30,7 @@ import {
   updateSearchPreferences,
   type OpportunityInput,
 } from "@/lib/opportunity-queries";
-import type { OpportunityStatus } from "@/lib/types";
+import type { ContactChannel, OpportunityStatus, Sponsorship } from "@/lib/types";
 
 function revalidateAll() {
   revalidatePath("/", "layout");
@@ -53,22 +58,52 @@ function readOpportunityForm(formData: FormData): OpportunityInput {
   if (coverLetter.length > 50000) throw new Error("Cover letter is too long");
   const fitScoreRaw = readText(formData, "fit_score");
   const fitScore = fitScoreRaw ? Number(fitScoreRaw) : null;
+  const market = readText(formData, "market").toUpperCase();
+  const sponsorship = readText(formData, "sponsorship").toLowerCase();
+  const channel = readText(formData, "contact_channel").toLowerCase();
+  const email = readText(formData, "contact_email");
+  if (email && !looksLikeEmail(email)) {
+    throw new Error("Leave email blank unless you already have that address.");
+  }
+  const draftTo = readText(formData, "draft_to");
+  if (draftTo && !looksLikeEmail(draftTo)) {
+    throw new Error("Draft recipient must be an address you already have, or stay blank.");
+  }
 
   return {
     title,
     company,
     location: emptyToNull(readText(formData, "location")),
+    market: isMarketCode(market) ? market : null,
+    seniority: emptyToNull(readText(formData, "seniority")),
+    tech_tags: emptyToNull(readText(formData, "tech_tags")),
     source: source as Platform,
     job_url: emptyToNull(readText(formData, "job_url")),
     ats: resolveAts(atsRaw) as AtsVendor,
     visa_note: emptyToNull(readText(formData, "visa_note")),
+    sponsorship: isSponsorship(sponsorship) ? (sponsorship as Sponsorship) : null,
+    nationality_constraint: emptyToNull(readText(formData, "nationality_constraint")),
     fit: emptyToNull(readText(formData, "fit")),
     fit_reason: emptyToNull(readText(formData, "fit_reason")),
     fit_score: fitScore != null && Number.isFinite(fitScore) ? Math.max(0, Math.round(fitScore)) : null,
     status: status as OpportunityStatus,
+    skip_reason: emptyToNull(readText(formData, "skip_reason")),
+    posted_at: normalizeDate(readText(formData, "posted_at")),
     discovered_at: normalizeDate(readText(formData, "discovered_at")) ?? todayIso(),
     notes: emptyToNull(String(formData.get("notes") ?? "")),
     cover_letter: coverLetter || null,
+    contact: {
+      email: email || null,
+      channel: isContactChannel(channel) ? (channel as ContactChannel) : "portal",
+      verified: formData.get("contact_verified") === "on",
+      verification_note: emptyToNull(readText(formData, "verification_note")),
+      userEntered: true,
+    },
+    draft: {
+      to: draftTo || null,
+      subject: emptyToNull(readText(formData, "draft_subject")),
+      body: coverLetter || null,
+    },
   };
 }
 
@@ -97,7 +132,7 @@ export async function setOpportunityStatusAction(formData: FormData) {
   const status = readText(formData, "status");
   if (!id) throw new Error("Missing opportunity");
   if (!isOpportunityStatus(status) || status === "promoted") throw new Error("Invalid status");
-  await updateOpportunityStatus(id, status);
+  await updateOpportunityStatus(id, status, emptyToNull(readText(formData, "skip_reason")));
   revalidateAll();
 }
 
@@ -132,10 +167,17 @@ export async function savePreferencesAction(
     .getAll("sources")
     .map((value) => String(value))
     .filter((value): value is Platform => isPlatform(value));
+  const marketCodes = formData
+    .getAll("market_codes")
+    .map((value) => String(value))
+    .filter((value) => isMarketCode(value));
   await updateSearchPreferences({
     include_titles: String(formData.get("include_titles") ?? ""),
     exclude_keywords: String(formData.get("exclude_keywords") ?? ""),
     markets: String(formData.get("markets") ?? ""),
+    market_codes: marketCodes,
+    min_seniority: String(formData.get("min_seniority") ?? "senior"),
+    require_sponsorship_au: formData.get("require_sponsorship_au") === "on",
     sources,
     stack_keywords: String(formData.get("stack_keywords") ?? ""),
     notes: String(formData.get("notes") ?? ""),
@@ -149,6 +191,9 @@ export async function resetPreferencesAction() {
     include_titles: DEFAULT_SEARCH_PREFERENCES.include_titles,
     exclude_keywords: DEFAULT_SEARCH_PREFERENCES.exclude_keywords,
     markets: DEFAULT_SEARCH_PREFERENCES.markets,
+    market_codes: [...DEFAULT_SEARCH_PREFERENCES.market_codes],
+    min_seniority: DEFAULT_SEARCH_PREFERENCES.min_seniority,
+    require_sponsorship_au: DEFAULT_SEARCH_PREFERENCES.require_sponsorship_au === 1,
     sources: DEFAULT_SEARCH_PREFERENCES.sources,
     stack_keywords: DEFAULT_SEARCH_PREFERENCES.stack_keywords,
     notes: DEFAULT_SEARCH_PREFERENCES.notes,
@@ -212,5 +257,7 @@ export async function importDigestAction(
       : null,
     errors.length ? errors.slice(0, 4).join(" ") : null,
   ].filter(Boolean);
-  return { ok: imported + applied > 0, message: parts.join(" ") };
+  const message = parts.join(" ");
+  await addOpportunityEvent(null, "import", message);
+  return { ok: imported + applied > 0, message };
 }

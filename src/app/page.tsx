@@ -99,7 +99,8 @@ export default async function DashboardPage() {
               Opportunities
             </CardTitle>
             <CardDescription>
-              {opportunities.skipped} skipped · {opportunities.promoted} promoted
+              {opportunities.portal_only} portal only · {opportunities.skipped} skipped ·{" "}
+              {opportunities.promoted} promoted
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">

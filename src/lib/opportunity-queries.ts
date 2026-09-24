@@ -4,7 +4,14 @@ import { randomUUID } from "node:crypto";
 import {
   companyTitleKey,
   DEFAULT_SEARCH_PREFERENCES,
+  inferMarket,
+  inferSeniority,
+  isContactChannel,
+  isMarketCode,
   isOpportunityStatus,
+  isSponsorship,
+  parseSponsorship,
+  storableContactEmail,
   urlKeyOf,
   type DigestRow,
 } from "@/lib/assist";
@@ -15,29 +22,57 @@ import { all, get, run, withTransaction } from "@/lib/db";
 import { addActivity, insertApplication } from "@/lib/queries";
 import type {
   Application,
+  ContactChannel,
   DuplicateMatch,
   Opportunity,
+  OpportunityContact,
   OpportunityCounts,
+  OpportunityDraft,
+  OpportunityEvent,
   OpportunityStatus,
   SearchPreferences,
+  Sponsorship,
 } from "@/lib/types";
+
+export type OpportunityContactInput = {
+  email?: string | null;
+  channel?: ContactChannel | null;
+  verified?: boolean;
+  verification_note?: string | null;
+  userEntered?: boolean;
+};
+
+export type OpportunityDraftInput = {
+  to?: string | null;
+  subject?: string | null;
+  body?: string | null;
+};
 
 export type OpportunityInput = {
   title: string;
   company: string;
   location?: string | null;
+  market?: string | null;
+  seniority?: string | null;
+  tech_tags?: string | null;
   source: Platform;
   job_url?: string | null;
   ats?: AtsVendor | null;
   visa_note?: string | null;
+  sponsorship?: Sponsorship | null;
+  nationality_constraint?: string | null;
   fit?: string | null;
   fit_score?: number | null;
   fit_reason?: string | null;
   status: OpportunityStatus;
+  skip_reason?: string | null;
+  posted_at?: string | null;
   discovered_at?: string | null;
   notes?: string | null;
   cover_letter?: string | null;
   application_id?: string | null;
+  contact?: OpportunityContactInput | null;
+  draft?: OpportunityDraftInput | null;
 };
 
 export type OpportunityListItem = Opportunity & { duplicate: boolean };
@@ -53,14 +88,19 @@ export async function getSearchPreferences(): Promise<SearchPreferences> {
   if (existing) return existing;
   await run(
     `INSERT OR IGNORE INTO search_preferences (
-      id, include_titles, exclude_keywords, markets, sources, stack_keywords, notes, updated_at
+      id, include_titles, exclude_keywords, markets, market_codes, min_seniority,
+      require_sponsorship_au, never_invent_email, sources, stack_keywords, notes, updated_at
     ) VALUES (
-      'default', @include_titles, @exclude_keywords, @markets, @sources, @stack_keywords, @notes, @updated_at
+      'default', @include_titles, @exclude_keywords, @markets, @market_codes, @min_seniority,
+      @require_sponsorship_au, 1, @sources, @stack_keywords, @notes, @updated_at
     )`,
     {
       include_titles: DEFAULT_SEARCH_PREFERENCES.include_titles,
       exclude_keywords: DEFAULT_SEARCH_PREFERENCES.exclude_keywords,
       markets: DEFAULT_SEARCH_PREFERENCES.markets,
+      market_codes: JSON.stringify(DEFAULT_SEARCH_PREFERENCES.market_codes),
+      min_seniority: DEFAULT_SEARCH_PREFERENCES.min_seniority,
+      require_sponsorship_au: DEFAULT_SEARCH_PREFERENCES.require_sponsorship_au,
       sources: JSON.stringify(DEFAULT_SEARCH_PREFERENCES.sources),
       stack_keywords: DEFAULT_SEARCH_PREFERENCES.stack_keywords,
       notes: DEFAULT_SEARCH_PREFERENCES.notes,
@@ -76,16 +116,24 @@ export async function updateSearchPreferences(input: {
   include_titles: string;
   exclude_keywords: string;
   markets: string;
+  market_codes: string[];
+  min_seniority: string;
+  require_sponsorship_au: boolean;
   sources: Platform[];
   stack_keywords: string;
   notes: string;
 }) {
   await getSearchPreferences();
+  const codes = input.market_codes.filter((code) => isMarketCode(code));
   await run(
     `UPDATE search_preferences SET
       include_titles = @include_titles,
       exclude_keywords = @exclude_keywords,
       markets = @markets,
+      market_codes = @market_codes,
+      min_seniority = @min_seniority,
+      require_sponsorship_au = @require_sponsorship_au,
+      never_invent_email = 1,
       sources = @sources,
       stack_keywords = @stack_keywords,
       notes = @notes,
@@ -95,6 +143,9 @@ export async function updateSearchPreferences(input: {
       include_titles: input.include_titles,
       exclude_keywords: input.exclude_keywords,
       markets: input.markets,
+      market_codes: JSON.stringify(codes.length ? codes : DEFAULT_SEARCH_PREFERENCES.market_codes),
+      min_seniority: input.min_seniority || "senior",
+      require_sponsorship_au: input.require_sponsorship_au ? 1 : 0,
       sources: JSON.stringify(input.sources),
       stack_keywords: input.stack_keywords,
       notes: input.notes,
@@ -119,6 +170,8 @@ export async function listOpportunities(filters?: {
   status?: OpportunityStatus | "all";
   source?: Platform | "all";
   market?: string;
+  marketCode?: string;
+  tech?: string;
 }): Promise<OpportunityListItem[]> {
   const where: string[] = [];
   const params: Record<string, string> = {};
@@ -137,8 +190,16 @@ export async function listOpportunities(filters?: {
     params.source = filters.source;
   }
   if (filters?.market?.trim()) {
-    where.push("(location LIKE @market OR visa_note LIKE @market OR notes LIKE @market)");
+    where.push("(location LIKE @market OR market LIKE @market OR visa_note LIKE @market OR notes LIKE @market)");
     params.market = `%${filters.market.trim()}%`;
+  }
+  if (filters?.marketCode && isMarketCode(filters.marketCode)) {
+    where.push(marketCodeClause(filters.marketCode));
+    params.marketCode = filters.marketCode;
+  }
+  if (filters?.tech?.trim()) {
+    where.push("(tech_tags LIKE @tech OR title LIKE @tech OR notes LIKE @tech)");
+    params.tech = `%${filters.tech.trim()}%`;
   }
 
   const opportunities = await all<Opportunity>(
@@ -157,8 +218,10 @@ export async function getOpportunityCounts(): Promise<OpportunityCounts> {
     new: 0,
     worth_a_look: 0,
     draft_ready: 0,
+    portal_only: 0,
     skipped: 0,
     promoted: 0,
+    closed: 0,
   };
   for (const row of rows) {
     const count = row.n ?? 0;
@@ -246,16 +309,20 @@ export async function insertOpportunity(input: OpportunityInput) {
   const now = nowIso();
   await run(
     `INSERT INTO opportunities (
-      id, title, company, location, source, job_url, url_key, company_title_key,
-      ats, visa_note, fit, fit_score, fit_reason, status, discovered_at, notes,
-      cover_letter, application_id, created_at, updated_at
+      id, title, company, location, market, seniority, tech_tags, source, job_url, url_key,
+      company_title_key, ats, visa_note, sponsorship, nationality_constraint, fit, fit_score,
+      fit_reason, status, skip_reason, posted_at, discovered_at, notes, cover_letter,
+      application_id, created_at, updated_at
     ) VALUES (
-      @id, @title, @company, @location, @source, @job_url, @url_key, @company_title_key,
-      @ats, @visa_note, @fit, @fit_score, @fit_reason, @status, @discovered_at, @notes,
-      @cover_letter, @application_id, @created_at, @updated_at
+      @id, @title, @company, @location, @market, @seniority, @tech_tags, @source, @job_url, @url_key,
+      @company_title_key, @ats, @visa_note, @sponsorship, @nationality_constraint, @fit, @fit_score,
+      @fit_reason, @status, @skip_reason, @posted_at, @discovered_at, @notes, @cover_letter,
+      @application_id, @created_at, @updated_at
     )`,
     opportunityArgs(opportunityId, input, now, now)
   );
+  await saveContactAndDraft(opportunityId, input);
+  await addOpportunityEvent(opportunityId, "created", `Saved ${input.title} at ${input.company}.`);
   return opportunityId;
 }
 
@@ -270,16 +337,23 @@ export async function updateOpportunity(opportunityId: string, input: Opportunit
       title = @title,
       company = @company,
       location = @location,
+      market = @market,
+      seniority = @seniority,
+      tech_tags = @tech_tags,
       source = @source,
       job_url = @job_url,
       url_key = @url_key,
       company_title_key = @company_title_key,
       ats = @ats,
       visa_note = @visa_note,
+      sponsorship = @sponsorship,
+      nationality_constraint = @nationality_constraint,
       fit = @fit,
       fit_score = @fit_score,
       fit_reason = @fit_reason,
       status = @status,
+      skip_reason = @skip_reason,
+      posted_at = @posted_at,
       discovered_at = @discovered_at,
       notes = @notes,
       cover_letter = @cover_letter,
@@ -287,18 +361,40 @@ export async function updateOpportunity(opportunityId: string, input: Opportunit
     WHERE id = @id`,
     opportunityArgs(opportunityId, input, existing.created_at, nowIso())
   );
+  await saveContactAndDraft(opportunityId, input);
+  if (existing.status !== input.status) {
+    const reason = input.status === "skipped" ? emptyToNull(input.skip_reason) : null;
+    await addOpportunityEvent(
+      opportunityId,
+      "status",
+      reason
+        ? `Status ${existing.status.replaceAll("_", " ")} → ${input.status.replaceAll("_", " ")}. ${reason}`
+        : `Status ${existing.status.replaceAll("_", " ")} → ${input.status.replaceAll("_", " ")}.`
+    );
+  }
 }
 
-export async function updateOpportunityStatus(opportunityId: string, status: OpportunityStatus) {
+export async function updateOpportunityStatus(
+  opportunityId: string,
+  status: OpportunityStatus,
+  skipReason?: string | null
+) {
   if (status === "promoted") throw new Error("Use Promote to application");
   const existing = await getOpportunity(opportunityId);
   if (!existing) throw new Error("Opportunity not found");
-  if (existing.status === status) return;
-  await run("UPDATE opportunities SET status = ?, updated_at = ? WHERE id = ?", [
-    status,
-    nowIso(),
+  const reason = status === "skipped" ? emptyToNull(skipReason) ?? existing.skip_reason : null;
+  if (existing.status === status && reason === existing.skip_reason) return;
+  await run(
+    "UPDATE opportunities SET status = ?, skip_reason = ?, updated_at = ? WHERE id = ?",
+    [status, reason, nowIso(), opportunityId]
+  );
+  const from = existing.status.replaceAll("_", " ");
+  const to = status.replaceAll("_", " ");
+  await addOpportunityEvent(
     opportunityId,
-  ]);
+    "status",
+    reason ? `Status ${from} → ${to}. ${reason}` : `Status ${from} → ${to}.`
+  );
 }
 
 export async function deleteOpportunity(opportunityId: string) {
@@ -350,6 +446,11 @@ export async function promoteOpportunity(opportunityId: string) {
        WHERE id = ?`,
       [applicationId, nowIso(), opportunityId]
     );
+    await addOpportunityEvent(
+      opportunityId,
+      "promoted",
+      "Promoted into a Saved application. Nothing was emailed or submitted."
+    );
 
     if (applicationMatch) {
       await addActivity(
@@ -381,15 +482,24 @@ export async function importDigestRow(
       title: row.title,
       company: row.company,
       location: row.location,
+      market: row.marketCode,
+      seniority: row.seniority,
+      tech_tags: row.techTags,
       source: row.source,
       job_url: row.jobUrl,
       ats,
       visa_note: row.visaNote,
+      sponsorship: row.sponsorship,
+      nationality_constraint: row.nationalityConstraint,
+      skip_reason: row.digestStatus === "skipped" ? row.skipReason : null,
+      posted_at: row.postedAt,
       fit: row.fit,
       fit_reason: null,
       fit_score: null,
       discovered_at: discovered,
       cover_letter: row.coverLetter,
+      contact: contactFromDigest(row),
+      draft: draftFromDigest(row),
     };
 
     if (row.digestStatus === "applied" && options.recordApplied) {
@@ -493,16 +603,23 @@ function opportunityArgs(opportunityId: string, input: OpportunityInput, created
     title: input.title.trim(),
     company: input.company.trim(),
     location: emptyToNull(input.location),
+    market: normalizeMarket(input.market, input.location),
+    seniority: emptyToNull(input.seniority) ?? inferSeniority(input.title),
+    tech_tags: emptyToNull(input.tech_tags),
     source: input.source,
     job_url: emptyToNull(input.job_url),
     url_key: urlKeyOf(input.job_url),
     company_title_key: companyTitleKey(input.company, input.title),
     ats: resolveAts(input.ats),
     visa_note: emptyToNull(input.visa_note),
+    sponsorship: normalizeSponsorship(input.sponsorship, input.visa_note),
+    nationality_constraint: emptyToNull(input.nationality_constraint),
     fit: emptyToNull(input.fit),
     fit_score: input.fit_score ?? null,
     fit_reason: emptyToNull(input.fit_reason),
     status: input.status,
+    skip_reason: input.status === "skipped" ? emptyToNull(input.skip_reason) : null,
+    posted_at: emptyToNull(input.posted_at),
     discovered_at: emptyToNull(input.discovered_at) ?? todayIso(),
     notes: emptyToNull(input.notes),
     cover_letter: emptyToNull(input.cover_letter),
@@ -528,4 +645,177 @@ function promotionNotes(opportunity: Opportunity) {
 function emptyToNull(value?: string | null) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
+}
+
+function normalizeMarket(market: string | null | undefined, location: string | null | undefined) {
+  const code = emptyToNull(market)?.toUpperCase() ?? "";
+  if (isMarketCode(code)) return code;
+  return inferMarket(location);
+}
+
+function normalizeSponsorship(
+  sponsorship: string | null | undefined,
+  visaNote: string | null | undefined
+): Sponsorship {
+  const value = emptyToNull(sponsorship)?.toLowerCase() ?? "";
+  if (isSponsorship(value)) return value;
+  return parseSponsorship(visaNote);
+}
+
+function marketCodeClause(code: string) {
+  if (code === "SG") {
+    return "(market = @marketCode OR ((market IS NULL OR market = '') AND location LIKE '%singapore%'))";
+  }
+  if (code === "TH") {
+    return "(market = @marketCode OR ((market IS NULL OR market = '') AND (location LIKE '%thailand%' OR location LIKE '%bangkok%')))";
+  }
+  if (code === "AU") {
+    return "(market = @marketCode OR ((market IS NULL OR market = '') AND (location LIKE '%australia%' OR location LIKE '%sydney%' OR location LIKE '%melbourne%' OR location LIKE '%brisbane%' OR location LIKE '%perth%')))";
+  }
+  return "market = @marketCode";
+}
+
+export async function getOpportunityContact(opportunityId: string) {
+  return get<OpportunityContact>(
+    "SELECT * FROM opportunity_contacts WHERE opportunity_id = ?",
+    [opportunityId]
+  );
+}
+
+export async function getLatestDraft(opportunityId: string) {
+  return get<OpportunityDraft>(
+    `SELECT * FROM opportunity_drafts WHERE opportunity_id = ? ORDER BY created_at DESC LIMIT 1`,
+    [opportunityId]
+  );
+}
+
+export async function listOpportunityEvents(opportunityId: string, limit = 20) {
+  return all<OpportunityEvent>(
+    `SELECT * FROM opportunity_events WHERE opportunity_id = ? ORDER BY created_at DESC LIMIT ?`,
+    [opportunityId, limit]
+  );
+}
+
+export async function listRecentOpportunityEvents(limit = 8) {
+  return all<OpportunityEvent>(
+    `SELECT * FROM opportunity_events ORDER BY created_at DESC LIMIT ?`,
+    [limit]
+  );
+}
+
+export async function addOpportunityEvent(
+  opportunityId: string | null,
+  type: string,
+  message: string
+) {
+  await run(
+    `INSERT INTO opportunity_events (id, opportunity_id, type, message, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [id(), opportunityId, type, message, nowIso()]
+  );
+}
+
+async function saveContactAndDraft(opportunityId: string, input: OpportunityInput) {
+  if (input.contact) await upsertOpportunityContact(opportunityId, input.contact);
+  const body = emptyToNull(input.draft?.body) ?? emptyToNull(input.cover_letter);
+  if (!body && !input.draft) return;
+  if (!body) return;
+  const contact = input.contact ? resolvedContact(input.contact) : null;
+  const explicitTo = storableContactEmail(input.draft?.to, { userEntered: true, verified: false });
+  const verifiedTo = contact?.verified && contact.email ? contact.email : null;
+  await insertDraftIfChanged(opportunityId, {
+    to: explicitTo ?? verifiedTo,
+    subject: emptyToNull(input.draft?.subject) ?? `${input.title.trim()} at ${input.company.trim()}`,
+    body,
+  });
+}
+
+function contactFromDigest(row: DigestRow): OpportunityContactInput | null {
+  const email = row.contactEmail;
+  const channel = row.contactChannel ?? (email ? "email" : "portal");
+  if (!email && !row.contactNote && !row.contactChannel) return null;
+  const stored = storableContactEmail(email, { userEntered: false, verified: row.contactVerified });
+  const omitted =
+    email && !stored ? "Unverified address was not stored." : null;
+  return {
+    email: stored,
+    channel,
+    verified: Boolean(stored) && row.contactVerified,
+    verification_note: [row.contactNote, omitted].filter(Boolean).join(" ") || null,
+    userEntered: false,
+  };
+}
+
+function draftFromDigest(row: DigestRow): OpportunityDraftInput | null {
+  if (!row.coverLetter && !row.draftSubject && !row.draftTo) return null;
+  const to =
+    row.draftTo ??
+    (row.contactVerified ? storableContactEmail(row.contactEmail, { userEntered: false, verified: true }) : null);
+  return {
+    to,
+    subject: row.draftSubject,
+    body: row.coverLetter,
+  };
+}
+
+function resolvedContact(input: OpportunityContactInput) {
+  const verified = Boolean(input.verified);
+  const email = storableContactEmail(input.email, {
+    userEntered: Boolean(input.userEntered),
+    verified,
+  });
+  const omitted =
+    emptyToNull(input.email) && !email ? "Unverified address was not stored." : null;
+  const channel = input.channel && isContactChannel(input.channel) ? input.channel : email ? "email" : "portal";
+  return {
+    email,
+    channel,
+    verified: email ? verified : false,
+    verification_note: [emptyToNull(input.verification_note), omitted].filter(Boolean).join(" ") || null,
+  };
+}
+
+async function upsertOpportunityContact(opportunityId: string, input: OpportunityContactInput) {
+  const contact = resolvedContact(input);
+  await run(
+    `INSERT INTO opportunity_contacts (
+      opportunity_id, email, channel, verified, verification_note, updated_at
+    ) VALUES (
+      @opportunity_id, @email, @channel, @verified, @verification_note, @updated_at
+    )
+    ON CONFLICT(opportunity_id) DO UPDATE SET
+      email = excluded.email,
+      channel = excluded.channel,
+      verified = excluded.verified,
+      verification_note = excluded.verification_note,
+      updated_at = excluded.updated_at`,
+    {
+      opportunity_id: opportunityId,
+      email: contact.email,
+      channel: contact.channel,
+      verified: contact.verified ? 1 : 0,
+      verification_note: contact.verification_note,
+      updated_at: nowIso(),
+    }
+  );
+}
+
+async function insertDraftIfChanged(
+  opportunityId: string,
+  draft: { to: string | null; subject: string | null; body: string }
+) {
+  const latest = await getLatestDraft(opportunityId);
+  if (
+    latest &&
+    latest.body === draft.body &&
+    (latest.to_address ?? null) === draft.to &&
+    (latest.subject ?? null) === draft.subject
+  ) {
+    return;
+  }
+  await run(
+    `INSERT INTO opportunity_drafts (id, opportunity_id, to_address, subject, body, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [id(), opportunityId, draft.to, draft.subject, draft.body, nowIso()]
+  );
 }

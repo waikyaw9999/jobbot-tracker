@@ -9,10 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  CONTACT_CHANNELS,
   FIT_LABELS,
   hintsFromJobUrl,
+  MARKETS,
   OPPORTUNITY_STATUSES,
   scoreFit,
+  SENIORITIES,
+  SPONSORSHIP_OPTIONS,
 } from "@/lib/assist";
 import { PLATFORM_GROUPS } from "@/lib/constants";
 import {
@@ -20,16 +24,26 @@ import {
   findDuplicateMatchesAction,
   updateOpportunityAction,
 } from "@/lib/opportunity-actions";
-import type { DuplicateMatch, Opportunity, SearchPreferences } from "@/lib/types";
+import type {
+  DuplicateMatch,
+  Opportunity,
+  OpportunityContact,
+  OpportunityDraft,
+  SearchPreferences,
+} from "@/lib/types";
 
 export function OpportunityForm({
   opportunity,
   preferences,
   today,
+  contact,
+  draft,
 }: {
   opportunity?: Opportunity;
   preferences: SearchPreferences;
   today: string;
+  contact?: OpportunityContact | null;
+  draft?: OpportunityDraft | null;
 }) {
   const action = opportunity
     ? updateOpportunityAction.bind(null, opportunity.id)
@@ -40,6 +54,9 @@ export function OpportunityForm({
   const [company, setCompany] = useState(opportunity?.company ?? "");
   const [source, setSource] = useState<string>(opportunity?.source ?? "linkedin");
   const [ats, setAts] = useState<string>(opportunity?.ats || "unknown");
+  const [market, setMarket] = useState(opportunity?.market ?? "");
+  const [seniority, setSeniority] = useState(opportunity?.seniority ?? "");
+  const [sponsorship, setSponsorship] = useState(opportunity?.sponsorship || "unknown");
   const [fit, setFit] = useState(opportunity?.fit ?? "");
   const [fitReason, setFitReason] = useState(opportunity?.fit_reason ?? "");
   const [fitScore, setFitScore] = useState<number | null>(opportunity?.fit_score ?? null);
@@ -99,6 +116,9 @@ export function OpportunityForm({
         location: locationRef.current?.value,
         visaNote: visaRef.current?.value,
         notes: notesRef.current?.value,
+        seniority,
+        market,
+        sponsorship,
       },
       preferences
     );
@@ -176,6 +196,42 @@ export function OpportunityForm({
             placeholder="Singapore · Bangkok · Sydney"
           />
         </Field>
+        <Field label="Market" htmlFor="market">
+          <NativeSelect id="market" name="market" value={market} onChange={(event) => setMarket(event.target.value)}>
+            <option value="">Infer from location</option>
+            {MARKETS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label} ({item.value})
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="Seniority" htmlFor="seniority">
+          <NativeSelect
+            id="seniority"
+            name="seniority"
+            value={seniority}
+            onChange={(event) => setSeniority(event.target.value)}
+          >
+            <option value="">Infer from title</option>
+            {SENIORITIES.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="Tech tags" htmlFor="tech_tags">
+          <Input
+            id="tech_tags"
+            name="tech_tags"
+            defaultValue={opportunity?.tech_tags ?? ""}
+            placeholder="Java, Spring, Python"
+          />
+        </Field>
+        <Field label="Posted" htmlFor="posted_at">
+          <Input id="posted_at" name="posted_at" type="date" defaultValue={opportunity?.posted_at ?? ""} />
+        </Field>
         <Field label="Source" htmlFor="source">
           <NativeSelect
             id="source"
@@ -216,13 +272,43 @@ export function OpportunityForm({
             ))}
           </NativeSelect>
         </Field>
-        <Field label="Visa / sponsor" htmlFor="visa_note">
+        <Field label="Visa / sponsor note" htmlFor="visa_note">
           <Input
             id="visa_note"
             name="visa_note"
             ref={visaRef}
             defaultValue={opportunity?.visa_note ?? ""}
             placeholder="482 sponsor · not stated · local only"
+          />
+        </Field>
+        <Field label="Sponsorship" htmlFor="sponsorship">
+          <NativeSelect
+            id="sponsorship"
+            name="sponsorship"
+            value={sponsorship}
+            onChange={(event) => setSponsorship(event.target.value)}
+          >
+            {SPONSORSHIP_OPTIONS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <Field label="Nationality constraint" htmlFor="nationality_constraint">
+          <Input
+            id="nationality_constraint"
+            name="nationality_constraint"
+            defaultValue={opportunity?.nationality_constraint ?? ""}
+            placeholder="Only if the listing states one"
+          />
+        </Field>
+        <Field label="Skip reason" htmlFor="skip_reason">
+          <Input
+            id="skip_reason"
+            name="skip_reason"
+            defaultValue={opportunity?.skip_reason ?? ""}
+            placeholder="Optional, used when status is skipped"
           />
         </Field>
         <Field label="Discovered" htmlFor="discovered_at">
@@ -276,6 +362,63 @@ export function OpportunityForm({
             rows={4}
             defaultValue={opportunity?.notes ?? ""}
             placeholder="Listing snippet, recruiter context, why it is or is not a fit…"
+          />
+        </Field>
+        <Field label="Contact email" htmlFor="contact_email">
+          <Input
+            id="contact_email"
+            name="contact_email"
+            type="email"
+            defaultValue={contact?.email ?? ""}
+            placeholder="Only an address you already have"
+            autoComplete="off"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            JobBot never invents an address. An unverified email is stored only because you typed it, and it is not copied into the draft recipient.
+          </p>
+        </Field>
+        <Field label="Contact channel" htmlFor="contact_channel">
+          <NativeSelect id="contact_channel" name="contact_channel" defaultValue={contact?.channel || "portal"}>
+            {CONTACT_CHANNELS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </NativeSelect>
+        </Field>
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input
+            type="checkbox"
+            name="contact_verified"
+            defaultChecked={contact?.verified === 1}
+            className="size-4 accent-primary"
+          />
+          Address is verified
+        </label>
+        <Field label="Verification note" htmlFor="verification_note" className="sm:col-span-2">
+          <Input
+            id="verification_note"
+            name="verification_note"
+            defaultValue={contact?.verification_note ?? ""}
+            placeholder="Where you confirmed this contact"
+          />
+        </Field>
+        <Field label="Draft recipient" htmlFor="draft_to">
+          <Input
+            id="draft_to"
+            name="draft_to"
+            type="email"
+            defaultValue={draft?.to_address ?? ""}
+            placeholder="Optional. Leave blank to use a verified contact only."
+            autoComplete="off"
+          />
+        </Field>
+        <Field label="Draft subject" htmlFor="draft_subject">
+          <Input
+            id="draft_subject"
+            name="draft_subject"
+            defaultValue={draft?.subject ?? ""}
+            placeholder="Stored in the app. Gmail drafts are not created."
           />
         </Field>
         <Field label="Cover letter draft" htmlFor="cover_letter" className="sm:col-span-2">

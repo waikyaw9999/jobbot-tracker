@@ -27,8 +27,9 @@ export default function ImportDigestPage() {
         <summary className="cursor-pointer text-sm font-medium">Example markdown</summary>
         <pre className="mt-3 overflow-x-auto text-xs leading-relaxed text-muted-foreground">{DIGEST_EXAMPLE}</pre>
         <p className="mt-3 text-xs text-muted-foreground">
-          CSV columns: status, role, company, location, source, visa, fit, url, cover_letter.
-          Status values: applied, draft ready, worth a look, skipped. A heading such as{" "}
+          CSV columns: status, role, company, location, market_code, source, visa, fit, url, cover_letter,
+          seniority, tech_tags, email, verified. An email is stored only when verified is true.
+          Status values: applied, draft ready, portal only, worth a look, skipped, closed. A heading such as{" "}
           <span className="font-medium">## Draft ready</span> sets the status for the next table.
         </p>
       </details>

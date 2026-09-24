@@ -14,8 +14,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { marketLabel, sponsorshipLabel } from "@/lib/assist";
 import { formatDate, formatDateTime } from "@/lib/dates";
-import { findDuplicates, getOpportunity } from "@/lib/opportunity-queries";
+import {
+  findDuplicates,
+  getLatestDraft,
+  getOpportunity,
+  getOpportunityContact,
+  listOpportunityEvents,
+} from "@/lib/opportunity-queries";
+import { setOpportunityStatusAction } from "@/lib/opportunity-actions";
+import { SubmitButton } from "@/components/submit-button";
+import { Input } from "@/components/ui/input";
 
 export default async function OpportunityDetailPage({
   params,
@@ -23,8 +33,14 @@ export default async function OpportunityDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const opportunity = await getOpportunity(id);
+  const [opportunity, contact, draft, events] = await Promise.all([
+    getOpportunity(id),
+    getOpportunityContact(id),
+    getLatestDraft(id),
+    listOpportunityEvents(id),
+  ]);
   if (!opportunity) notFound();
+  const letter = draft?.body || opportunity.cover_letter;
 
   const duplicates = await findDuplicates({
     company: opportunity.company,
@@ -75,6 +91,19 @@ export default async function OpportunityDetailPage({
             status={opportunity.status}
             applicationId={opportunity.application_id}
           />
+          {opportunity.status !== "promoted" ? (
+            <form action={setOpportunityStatusAction} className="flex flex-wrap items-center gap-2">
+              <input type="hidden" name="id" value={opportunity.id} />
+              <input type="hidden" name="status" value="skipped" />
+              <Input name="skip_reason" placeholder="Skip reason (optional)" className="max-w-xs" />
+              <SubmitButton variant="ghost" size="sm">
+                Skip with note
+              </SubmitButton>
+            </form>
+          ) : null}
+          {opportunity.skip_reason ? (
+            <p className="text-sm text-muted-foreground">Skip reason: {opportunity.skip_reason}</p>
+          ) : null}
           {opportunity.fit_reason ? (
             <p className="text-xs text-muted-foreground">{opportunity.fit_reason}</p>
           ) : null}
@@ -108,16 +137,23 @@ export default async function OpportunityDetailPage({
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Cover letter</CardTitle>
-            <CardDescription>Stored on this opportunity. Copy it when you are ready to send it yourself.</CardDescription>
-            {opportunity.cover_letter ? (
+            <CardDescription>
+              Stored in the app. Copy it when you send it yourself. Creating a Gmail draft is not part of this version.
+            </CardDescription>
+            {letter ? (
               <CardAction>
-                <CopyTextButton text={opportunity.cover_letter} label="Copy letter" />
+                <CopyTextButton text={letter} label="Copy letter" />
               </CardAction>
             ) : null}
           </CardHeader>
-          <CardContent>
-            {opportunity.cover_letter ? (
-              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{opportunity.cover_letter}</pre>
+          <CardContent className="space-y-3">
+            {draft?.to_address || draft?.subject ? (
+              <p className="text-xs text-muted-foreground">
+                {[draft.to_address ? `To ${draft.to_address}` : null, draft.subject].filter(Boolean).join(" · ")}
+              </p>
+            ) : null}
+            {letter ? (
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{letter}</pre>
             ) : (
               <p className="text-sm text-muted-foreground">
                 No draft yet.{" "}
@@ -134,8 +170,14 @@ export default async function OpportunityDetailPage({
             <CardTitle>Listing</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
+            <Meta label="Market" value={opportunity.market ? `${marketLabel(opportunity.market)} (${opportunity.market})` : null} />
             <Meta label="Location" value={opportunity.location} />
-            <Meta label="Visa / sponsor" value={opportunity.visa_note} />
+            <Meta label="Seniority" value={opportunity.seniority} />
+            <Meta label="Tech" value={opportunity.tech_tags} />
+            <Meta label="Sponsorship" value={sponsorshipLabel(opportunity.sponsorship)} />
+            <Meta label="Visa note" value={opportunity.visa_note} />
+            <Meta label="Nationality" value={opportunity.nationality_constraint} />
+            <Meta label="Posted" value={opportunity.posted_at ? formatDate(opportunity.posted_at) : null} />
             <Meta label="Discovered" value={formatDate(opportunity.discovered_at)} />
             <Meta label="Updated" value={formatDateTime(opportunity.updated_at)} />
             <Meta
@@ -153,6 +195,40 @@ export default async function OpportunityDetailPage({
                 ) : null
               }
             />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Contact</CardTitle>
+            <CardDescription>Only an address you entered or a digest marked verified. Nothing is invented or sent.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <Meta label="Channel" value={contact?.channel} />
+            <Meta label="Email" value={contact?.email} />
+            <Meta label="Verified" value={contact ? (contact.verified ? "Yes" : "No") : null} />
+            <Meta label="Note" value={contact?.verification_note} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {events.length ? (
+              <ul className="space-y-2 text-sm">
+                {events.map((event) => (
+                  <li key={event.id}>
+                    <span className="text-muted-foreground">{formatDateTime(event.created_at)}</span>
+                    <span> · {event.message}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No activity yet.</p>
+            )}
           </CardContent>
         </Card>
       </div>

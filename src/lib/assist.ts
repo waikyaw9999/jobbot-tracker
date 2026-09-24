@@ -5,14 +5,21 @@ import {
   slugifyToken,
   type Platform,
 } from "@/lib/constants";
-import type { OpportunityStatus } from "@/lib/types";
+import type {
+  ContactChannel,
+  MarketCode,
+  OpportunityStatus,
+  Sponsorship,
+} from "@/lib/types";
 
 export const OPPORTUNITY_STATUSES = [
   { value: "new", label: "New", tone: "info" },
   { value: "worth_a_look", label: "Worth a look", tone: "warn" },
   { value: "draft_ready", label: "Draft ready", tone: "success" },
-  { value: "skipped", label: "Skipped", tone: "muted" },
+  { value: "portal_only", label: "Portal only", tone: "warn" },
   { value: "promoted", label: "Promoted", tone: "info" },
+  { value: "skipped", label: "Skipped", tone: "muted" },
+  { value: "closed", label: "Closed", tone: "muted" },
 ] as const satisfies readonly {
   value: OpportunityStatus;
   label: string;
@@ -35,18 +42,76 @@ export const ASSIST_SOURCES = [
 
 export type DigestStatus = "applied" | Exclude<OpportunityStatus, "promoted">;
 
+export const MARKETS = [
+  { value: "SG", label: "Singapore" },
+  { value: "TH", label: "Thailand" },
+  { value: "AU", label: "Australia" },
+  { value: "OTHER", label: "Other" },
+] as const satisfies readonly { value: MarketCode; label: string }[];
+
+export const SENIORITIES = [
+  { value: "senior", label: "Senior" },
+  { value: "staff", label: "Staff" },
+  { value: "lead", label: "Lead" },
+  { value: "principal", label: "Principal" },
+  { value: "manager", label: "Manager" },
+  { value: "director", label: "Director" },
+  { value: "mid", label: "Mid" },
+  { value: "junior", label: "Junior" },
+  { value: "intern", label: "Intern" },
+  { value: "unknown", label: "Unknown" },
+] as const;
+
+export const CONTACT_CHANNELS = [
+  { value: "email", label: "Email" },
+  { value: "portal", label: "Portal" },
+  { value: "line", label: "LINE" },
+  { value: "linkedin", label: "LinkedIn" },
+] as const satisfies readonly { value: ContactChannel; label: string }[];
+
+export const SPONSORSHIP_OPTIONS = [
+  { value: "unknown", label: "Unknown" },
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+] as const satisfies readonly { value: Sponsorship; label: string }[];
+
+const SENIORITY_RANK: Record<string, number> = {
+  intern: 0,
+  junior: 1,
+  mid: 2,
+  senior: 3,
+  staff: 4,
+  lead: 4,
+  manager: 4,
+  principal: 5,
+  director: 5,
+};
+
 export type DigestRow = {
   digestStatus: DigestStatus;
   title: string;
   company: string;
   location: string | null;
+  marketCode: MarketCode | null;
+  seniority: string | null;
+  techTags: string | null;
   source: Platform;
   visaNote: string | null;
+  sponsorship: Sponsorship;
+  nationalityConstraint: string | null;
+  skipReason: string | null;
   fit: string | null;
   jobUrl: string | null;
   coverLetter: string | null;
   notes: string | null;
   discoveredAt: string | null;
+  postedAt: string | null;
+  contactEmail: string | null;
+  contactChannel: ContactChannel | null;
+  contactVerified: boolean;
+  contactNote: string | null;
+  draftTo: string | null;
+  draftSubject: string | null;
 };
 
 export type DigestParseResult = {
@@ -65,6 +130,10 @@ export const DEFAULT_SEARCH_PREFERENCES = {
   ].join("\n"),
   exclude_keywords: ["intern", "junior", "unpaid", "graduate", "fresh graduate"].join("\n"),
   markets: ["Singapore", "Thailand / Bangkok", "Australia (visa sponsor preferred)"].join("\n"),
+  market_codes: ["SG", "TH", "AU"] as MarketCode[],
+  min_seniority: "senior",
+  require_sponsorship_au: 1,
+  never_invent_email: 1,
   sources: ASSIST_SOURCES.map((source) => source.value) as Platform[],
   stack_keywords: [
     "Java",
@@ -166,13 +235,25 @@ type DigestField =
   | "title"
   | "company"
   | "location"
+  | "marketCode"
+  | "seniority"
+  | "techTags"
   | "source"
   | "visa"
   | "fit"
   | "url"
   | "cover"
   | "notes"
-  | "date";
+  | "date"
+  | "postedAt"
+  | "nationality"
+  | "skipReason"
+  | "email"
+  | "channel"
+  | "verified"
+  | "verificationNote"
+  | "draftTo"
+  | "subject";
 
 const HEADER_MAP: Record<string, DigestField> = {
   status: "status",
@@ -190,6 +271,14 @@ const HEADER_MAP: Record<string, DigestField> = {
   loc: "location",
   market: "location",
   city: "location",
+  market_code: "marketCode",
+  marketcode: "marketCode",
+  seniority: "seniority",
+  level: "seniority",
+  tech: "techTags",
+  tech_tags: "techTags",
+  tags: "techTags",
+  stack: "techTags",
   source: "source",
   board: "source",
   platform: "source",
@@ -219,6 +308,19 @@ const HEADER_MAP: Record<string, DigestField> = {
   discovered: "date",
   discovered_at: "date",
   date: "date",
+  posted: "postedAt",
+  posted_at: "postedAt",
+  nationality: "nationality",
+  nationality_constraint: "nationality",
+  skip_reason: "skipReason",
+  email: "email",
+  contact_email: "email",
+  channel: "channel",
+  verified: "verified",
+  verification_note: "verificationNote",
+  to: "draftTo",
+  draft_to: "draftTo",
+  subject: "subject",
 };
 
 export function isOpportunityStatus(value: string): value is OpportunityStatus {
@@ -249,6 +351,96 @@ export function parseSourceList(raw: string | null | undefined): Platform[] {
   } catch {
     return [];
   }
+}
+
+export function isMarketCode(value: string): value is MarketCode {
+  return MARKETS.some((market) => market.value === value);
+}
+
+export function isSponsorship(value: string): value is Sponsorship {
+  return value === "yes" || value === "no" || value === "unknown";
+}
+
+export function isContactChannel(value: string): value is ContactChannel {
+  return CONTACT_CHANNELS.some((channel) => channel.value === value);
+}
+
+export function parseMarketCodes(raw: string | null | undefined): MarketCode[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((value): value is MarketCode => typeof value === "string" && isMarketCode(value));
+  } catch {
+    return textLines(raw).filter((value): value is MarketCode => isMarketCode(value));
+  }
+}
+
+export function marketLabel(value: string | null | undefined) {
+  return MARKETS.find((market) => market.value === value)?.label ?? value ?? "";
+}
+
+export function sponsorshipLabel(value: string | null | undefined) {
+  if (value === "yes") return "Sponsorship yes";
+  if (value === "no") return "Sponsorship no";
+  if (value === "unknown") return "Sponsorship unknown";
+  return value ?? "";
+}
+
+export function looksLikeEmail(value: string | null | undefined) {
+  const email = value?.trim() ?? "";
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+export function inferMarket(location: string | null | undefined): MarketCode | null {
+  const text = normToken(location ?? "");
+  if (!text) return null;
+  if (/\bsingapore\b|\bsg\b/.test(text)) return "SG";
+  if (/\bthailand\b|\bbangkok\b|\bthai\b/.test(text)) return "TH";
+  if (
+    /\baustralia\b|\bsydney\b|\bmelbourne\b|\bbrisbane\b|\bperth\b|\badelaide\b|\bcanberra\b/.test(
+      text
+    )
+  ) {
+    return "AU";
+  }
+  return "OTHER";
+}
+
+export function inferSeniority(title: string | null | undefined) {
+  const text = normToken(title ?? "");
+  if (!text) return null;
+  if (/\bintern\b/.test(text)) return "intern";
+  if (/\bjunior\b|\bgraduate\b/.test(text)) return "junior";
+  if (/\bdirector\b/.test(text)) return "director";
+  if (/\bprincipal\b/.test(text)) return "principal";
+  if (/\bengineering manager\b|\bmanager\b/.test(text)) return "manager";
+  if (/\btech lead\b|\bteam lead\b|\blead\b/.test(text)) return "lead";
+  if (/\bstaff\b/.test(text)) return "staff";
+  if (/\bsenior\b|\bsr\b/.test(text)) return "senior";
+  if (/\bmid\b/.test(text)) return "mid";
+  return null;
+}
+
+export function parseSponsorship(value: string | null | undefined): Sponsorship {
+  const text = normToken(value ?? "");
+  if (!text || text === "-" || text === "—" || /not stated|unknown|n a|na/.test(text)) return "unknown";
+  if (/no sponsor|not sponsor|without sponsor|local only|citizens only|no visa|sponsorship no/.test(text)) {
+    return "no";
+  }
+  if (/482|sponsor|visa/.test(text)) return "yes";
+  return "unknown";
+}
+
+export function storableContactEmail(
+  email: string | null | undefined,
+  options: { userEntered: boolean; verified: boolean }
+) {
+  const trimmed = email?.trim() ?? "";
+  if (!trimmed) return null;
+  if (!looksLikeEmail(trimmed)) return null;
+  if (options.userEntered || options.verified) return trimmed;
+  return null;
 }
 
 export function marketChips(markets: string | null | undefined) {
@@ -372,11 +564,16 @@ export function scoreFit(
     location?: string | null;
     visaNote?: string | null;
     notes?: string | null;
+    seniority?: string | null;
+    market?: string | null;
+    sponsorship?: string | null;
   },
   prefs: {
     include_titles: string;
     exclude_keywords: string;
     stack_keywords: string;
+    min_seniority?: string | null;
+    require_sponsorship_au?: number | boolean | null;
   }
 ): FitResult {
   const title = input.title.trim();
@@ -417,6 +614,21 @@ export function scoreFit(
   bits.push(matchedStack.length ? `stack ${matchedStack.join(", ")}` : "no stack overlap");
   if (excluded.length) bits.push(`excluded ${excluded.join(", ")}`);
 
+  const seniority = input.seniority || inferSeniority(input.title);
+  const minRank = SENIORITY_RANK[String(prefs.min_seniority ?? "").toLowerCase()];
+  const roleRank = seniority ? SENIORITY_RANK[seniority] : undefined;
+  if (minRank != null && roleRank != null && roleRank < minRank) {
+    label = "Stretch";
+    bits.push(`below ${prefs.min_seniority} seniority`);
+  }
+  const market = input.market || inferMarket(input.location);
+  const sponsorship = input.sponsorship || parseSponsorship(input.visaNote);
+  const requireAu = prefs.require_sponsorship_au === true || prefs.require_sponsorship_au === 1;
+  if (requireAu && market === "AU" && sponsorship === "no") {
+    label = "Stretch";
+    bits.push("AU sponsorship required");
+  }
+
   return {
     label,
     score,
@@ -456,6 +668,8 @@ export function parseDigestStatus(value: string | null | undefined): DigestStatu
     return "worth_a_look";
   }
   if (["skipped", "skip", "pass", "passed"].includes(slug)) return "skipped";
+  if (["portal only", "portal", "apply on portal", "company portal"].includes(slug)) return "portal_only";
+  if (["closed", "expired", "filled", "no longer available"].includes(slug)) return "closed";
   if (slug === "new" || slug === "fresh") return "new";
   return null;
 }
@@ -702,7 +916,7 @@ function isHeaderRow(cells: string[]) {
 function inferFields(cells: string[]): (DigestField | null)[] {
   if (isHeaderRow(cells)) return cells.map((cell) => HEADER_MAP[headerKey(cell)] ?? null);
   const first = cleanPlain(cells[0])?.toLowerCase() ?? "";
-  const statusLike = /applied|draft|worth|skip|new|carried/.test(first);
+  const statusLike = /applied|draft|worth|skip|new|carried|portal|closed/.test(first);
   const base: DigestField[] = statusLike
     ? ["status", "title", "company", "location", "source", "visa", "fit", "url", "cover"]
     : ["title", "company", "location", "source", "visa", "fit", "url", "cover"];
@@ -720,22 +934,45 @@ function buildDigestRow(
   const fromCell = parseDigestStatus(cleanPlain(record.status));
   const digestStatus = fromCell ?? sectionStatus ?? "new";
   const jobUrl = cleanUrl(record.url) ?? (titleBits.url ? cleanUrl(titleBits.url) : null);
+  const location = cleanPlain(record.location);
+  const visaNote = cleanPlain(record.visa);
+  const marketRaw = cleanPlain(record.marketCode)?.toUpperCase() ?? "";
+  const channelRaw = cleanPlain(record.channel)?.toLowerCase() ?? "";
+  const email = cleanPlain(record.email);
   return {
     ok: true,
     row: {
       digestStatus,
       title,
       company,
-      location: cleanPlain(record.location),
+      location,
+      marketCode: isMarketCode(marketRaw) ? marketRaw : inferMarket(location),
+      seniority: cleanPlain(record.seniority)?.toLowerCase() || inferSeniority(title),
+      techTags: cleanPlain(record.techTags),
       source: parseSource(cleanPlain(record.source)),
-      visaNote: cleanPlain(record.visa),
+      visaNote,
+      sponsorship: parseSponsorship(visaNote),
+      nationalityConstraint: cleanPlain(record.nationality),
+      skipReason: cleanPlain(record.skipReason),
       fit: normalizeFit(record.fit),
       jobUrl,
       coverLetter: cleanLong(record.cover),
       notes: cleanLong(record.notes),
       discoveredAt: normalizeDate(record.date),
+      postedAt: normalizeDate(record.postedAt),
+      contactEmail: looksLikeEmail(email) ? email : null,
+      contactChannel: isContactChannel(channelRaw) ? channelRaw : null,
+      contactVerified: parseVerified(record.verified),
+      contactNote: cleanPlain(record.verificationNote),
+      draftTo: looksLikeEmail(record.draftTo) ? cleanPlain(record.draftTo) : null,
+      draftSubject: cleanPlain(record.subject),
     },
   };
+}
+
+function parseVerified(value: string | null | undefined) {
+  const slug = cleanPlain(value)?.toLowerCase() ?? "";
+  return ["1", "true", "yes", "y", "verified"].includes(slug);
 }
 
 type LetterBlock = {
@@ -778,6 +1015,8 @@ function statusFromHeading(heading: string): DigestStatus | null {
   if (/^worth\b/.test(slug) || slug.includes("worth a look")) return "worth_a_look";
   if (/^skip/.test(slug)) return "skipped";
   if (/^applied\b/.test(slug)) return "applied";
+  if (/^portal\b/.test(slug) || slug.includes("portal only")) return "portal_only";
+  if (/^closed\b/.test(slug) || /^expired\b/.test(slug) || /^filled\b/.test(slug)) return "closed";
   if (/^new\b/.test(slug)) return "new";
   return null;
 }

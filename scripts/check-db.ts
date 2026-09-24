@@ -4,11 +4,14 @@ import { DIGEST_EXAMPLE, parseDigest } from "../src/lib/assist.ts";
 import {
   findDuplicates,
   getOpportunity,
+  getOpportunityContact,
   getSearchPreferences,
   importDigestRow,
   insertOpportunity,
+  listOpportunityEvents,
   listOpportunities,
   promoteOpportunity,
+  updateOpportunityStatus,
 } from "../src/lib/opportunity-queries.ts";
 import { deleteApplication, getApplication } from "../src/lib/queries.ts";
 
@@ -17,6 +20,10 @@ const prefs = await getSearchPreferences();
 assert.match(prefs.include_titles, /Senior Full Stack/);
 assert.match(prefs.notes, /Do not auto-apply/);
 assert.match(prefs.markets, /Australia/);
+assert.match(prefs.market_codes, /TH/);
+assert.match(prefs.market_codes, /SG/);
+assert.equal(prefs.require_sponsorship_au, 1);
+assert.equal(prefs.never_invent_email, 1);
 
 const createdId = await insertOpportunity({
   title: "Staff Engineer",
@@ -94,6 +101,24 @@ assert.ok(appliedRows[0]?.application_id);
 const appliedApp = await getApplication(appliedRows[0]!.application_id!);
 assert.equal(appliedApp?.status, "applied");
 assert.match(appliedApp?.notes ?? "", /did not email or submit/);
+
+const captured = await getOpportunity(createdId);
+assert.equal(captured?.market, "SG");
+
+const portalRow = parseDigest(`status,role,company,location,email,verified
+portal only,Senior Engineer,WideWorld,Bangkok,hr@wideworld.example,no
+`).rows[0];
+assert.ok(portalRow);
+assert.equal(await importDigestRow(portalRow, { recordApplied: false }), "imported");
+const portalRows = await listOpportunities({ q: "WideWorld", marketCode: "TH" });
+assert.equal(portalRows[0]?.status, "portal_only");
+assert.equal(portalRows[0]?.market, "TH");
+const hidden = await getOpportunityContact(portalRows[0]!.id);
+assert.equal(hidden?.email, null);
+assert.match(hidden?.verification_note ?? "", /not stored/);
+await updateOpportunityStatus(portalRows[0]!.id, "skipped", "Portal application only");
+const events = await listOpportunityEvents(portalRows[0]!.id);
+assert.ok(events.some((event) => event.message.includes("Portal application only")));
 
 console.log("db checks passed");
 }

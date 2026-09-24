@@ -9,10 +9,13 @@ const ACTIONS: {
   label: string;
   compact: string;
   variant: "outline" | "secondary" | "ghost";
+  compactVisible: boolean;
 }[] = [
-  { status: "worth_a_look", label: "Worth a look", compact: "Look", variant: "outline" },
-  { status: "draft_ready", label: "Draft ready", compact: "Draft", variant: "secondary" },
-  { status: "skipped", label: "Skip", compact: "Skip", variant: "ghost" },
+  { status: "worth_a_look", label: "Worth a look", compact: "Look", variant: "outline", compactVisible: false },
+  { status: "portal_only", label: "Portal only", compact: "Portal", variant: "outline", compactVisible: true },
+  { status: "draft_ready", label: "Draft ready", compact: "Draft", variant: "secondary", compactVisible: true },
+  { status: "skipped", label: "Skip", compact: "Skip", variant: "ghost", compactVisible: true },
+  { status: "closed", label: "Closed", compact: "Closed", variant: "ghost", compactVisible: false },
 ];
 
 export function OpportunityTriage({
@@ -36,7 +39,7 @@ export function OpportunityTriage({
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {ACTIONS.filter((action) => action.status !== status).map((action) => (
+      {ACTIONS.filter((action) => action.status !== status && (!compact || action.compactVisible)).map((action) => (
         <form key={action.status} action={setOpportunityStatusAction}>
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="status" value={action.status} />
